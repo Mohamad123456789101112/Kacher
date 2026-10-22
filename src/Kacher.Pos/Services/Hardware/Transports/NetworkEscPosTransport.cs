@@ -30,7 +30,7 @@ public sealed class NetworkEscPosTransport : IReceiptTransport
         _host = host;
         _port = port <= 0 ? 9100 : port;
         _log = log;
-        _connectTimeout = connectTimeout ?? TimeSpan.FromSeconds(4);
+        _connectTimeout = connectTimeout ?? TimeSpan.FromSeconds(3);
     }
 
     public string Description => $"Network ESC/POS → {_host}:{_port}";

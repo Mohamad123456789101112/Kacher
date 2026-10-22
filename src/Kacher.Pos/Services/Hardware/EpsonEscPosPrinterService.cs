@@ -243,7 +243,7 @@ public sealed class EpsonEscPosPrinterService : IReceiptPrinter, IDisposable
 
                 try
                 {
-                    await transport.SendAsync(job, ct).ConfigureAwait(false);
+                    await SendWithRetryAsync(transport, job, ct).ConfigureAwait(false);
                     stopwatch.Stop();
 
                     _log.Info($"Printed {description} ({job.Length} bytes) via {transport.Description}.");
@@ -275,6 +275,24 @@ public sealed class EpsonEscPosPrinterService : IReceiptPrinter, IDisposable
         finally
         {
             _jobGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Sends one job, retrying once for network transports only. A Wi-Fi roam or a DHCP renewal can
+    /// drop a single TCP connect; a USB/spooler failure is almost always a real fault (offline,
+    /// out of paper) where an immediate second attempt just wastes time.
+    /// </summary>
+    private static async Task SendWithRetryAsync(IReceiptTransport transport, byte[] payload, CancellationToken ct)
+    {
+        try
+        {
+            await transport.SendAsync(payload, ct).ConfigureAwait(false);
+        }
+        catch (Exception) when (transport is NetworkEscPosTransport && !ct.IsCancellationRequested)
+        {
+            await Task.Delay(250, ct).ConfigureAwait(false);
+            await transport.SendAsync(payload, ct).ConfigureAwait(false);
         }
     }
 

@@ -141,7 +141,9 @@ input buffer; interleaving two jobs corrupts both. The flow is:
 1. Build the payload (pure, no I/O).
 2. Send with a single `WriteAsync` — one buffer, one syscall.
 3. Retry once, only for `Network` transports (Wi-Fi roam / DHCP are the realistic transient failures).
-4. Pulse the drawer as a **separate** short job on cash sales, so a receipt retry never delays the kick.
+4. Append the drawer pulse to the **same** job as the receipt, at the very end. One job means one
+   connect/close cycle and no risk of the kick firing twice if the receipt is retried; the manual
+   "open drawer" button sends a job that contains only `ESC p`.
 
 Every job is timed and logged with its byte count.
 

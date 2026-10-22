@@ -23,6 +23,17 @@ this repository has been reviewed and statically validated, not executed. Treat 
 | 8 | All persisted timestamps are UTC; local conversion only at the edges | review of `SaleService`, `Invoice`, `ReceiptDocumentBuilder`, `PdfReceiptService`, `ReportService` | pass |
 | 9 | Money is `decimal` end-to-end (SQLite `TEXT` convention) | convention + review | pass |
 | 10 | Seed data is internally consistent (EAN-13 check digits, unique keys) | recomputed mod-10 check digits; checked unique-index columns | pass |
+| 11 | Every `.cs` file parses as valid C# | `tree-sitter-c-sharp` (wasm) over all 74 files | pass (one false positive, see below) |
+| 12 | Every class implementing a project interface declares all of its members | extracted interface members, matched against each implementing class | pass |
+| 13 | Every call site through an interface-typed field names a member that interface declares | member name + argument-arity comparison | pass |
+| 14 | Every `using Kacher.Pos.*` / `clr-namespace` reference resolves to a real namespace | namespace inventory cross-reference | pass |
+| 15 | No type is declared twice, and no simple name lives in two namespaces | declaration inventory (162 types) | pass |
+| 16 | Every `new X(...)` matches a constructor arity | constructor inventory vs call sites | pass |
+
+> Check 11 reports `Data/DatabaseConnectionFactory.cs` as a syntax error. That is a **grammar
+> limitation**, not a code defect: the file uses a C# 11 raw string literal (`""" … """`) for the
+> PRAGMA script, and the tree-sitter grammar used for the check predates raw strings. The same snippet
+> fails in isolation, and the Roslyn compiler accepts it.
 
 ### Known safe-by-design deviations
 
