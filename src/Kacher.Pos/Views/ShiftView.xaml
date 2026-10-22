@@ -1,0 +1,238 @@
+<UserControl x:Class="Kacher.Pos.Views.ShiftView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:Kacher.Pos.ViewModels"
+             xmlns:conv="clr-namespace:Kacher.Pos.Converters"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance vm:ShiftViewModel}"
+             d:DesignWidth="1200" d:DesignHeight="760">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
+    </UserControl.Resources>
+
+    <Grid>
+        <!-- ═══ No open shift ═══ -->
+        <Border Style="{StaticResource Kacher.Panel}" MaxWidth="640" VerticalAlignment="Center"
+                HorizontalAlignment="Center" Padding="40"
+                Visibility="{Binding HasOpenShift, Converter={StaticResource InverseBoolToVisibility}}">
+            <StackPanel>
+                <TextBlock Text="&#xE7E8;" FontFamily="Segoe MDL2 Assets" FontSize="44"
+                           Foreground="{DynamicResource Kacher.Accent}" HorizontalAlignment="Center" />
+                <TextBlock Text="Start a shift" Style="{StaticResource Kacher.Display}"
+                           HorizontalAlignment="Center" Margin="0,16,0,0" />
+                <TextBlock Text="Sales are recorded against a drawer session so the end-of-day report can reconcile cash, card and tax. Count the float, then open the drawer."
+                           Style="{StaticResource Kacher.Subtitle}" TextAlignment="Center"
+                           TextWrapping="Wrap" Margin="0,10,0,0" />
+
+                <!-- Result of the shift that was just closed -->
+                <Border Background="#1A22C55E" CornerRadius="12" Padding="16" Margin="0,18,0,0"
+                        Visibility="{Binding IsClosed, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel>
+                        <TextBlock Text="Shift closed ✓" FontSize="14" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Kacher.Success}" />
+                        <TextBlock Style="{StaticResource Kacher.Caption}" Margin="0,4,0,0">
+                            <Run Text="Cash difference:" />
+                            <Run Text="{Binding CashDifference, StringFormat={}{0:0.00} EGP}" FontWeight="SemiBold" />
+                        </TextBlock>
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                            <Button Content="Print Z-report" Style="{StaticResource Kacher.TouchButton}"
+                                    Height="42" MinHeight="42" Padding="14,0" Margin="0,0,8,0"
+                                    Command="{Binding PrintZReportCommand}" />
+                            <Button Content="Export PDF" Style="{StaticResource Kacher.TouchButton}"
+                                    Height="42" MinHeight="42" Padding="14,0"
+                                    Command="{Binding ExportZReportPdfCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Background="#22F59E0B" CornerRadius="12" Padding="14" Margin="0,18,0,0">
+                    <TextBlock Text="{Binding IntegrityHint}" FontSize="12"
+                               Foreground="{DynamicResource Kacher.Warning}" TextWrapping="Wrap" />
+                </Border>
+
+                <Button Content="Open shift" Style="{StaticResource Kacher.PrimaryButton}"
+                        Height="60" Margin="0,24,0,0"
+                        Command="{Binding OpenShiftCommand}"
+                        IsEnabled="{Binding CanOpenShift}" />
+            </StackPanel>
+        </Border>
+
+        <!-- ═══ Open shift dashboard ═══ -->
+        <Grid Visibility="{Binding HasOpenShift, Converter={StaticResource BoolToVisibility}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Border Grid.Row="0" Style="{StaticResource Kacher.Card}" Margin="0,0,0,12">
+                <Grid>
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding ShiftNumber}" Style="{StaticResource Kacher.Display}" />
+                            <Border Background="#3322C55E" CornerRadius="999" Padding="10,4" Margin="14,0,0,0"
+                                    VerticalAlignment="Center">
+                                <TextBlock Text="OPEN" FontSize="11" FontWeight="Bold"
+                                           Foreground="{DynamicResource Kacher.Success}" />
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Margin="0,6,0,0" Style="{StaticResource Kacher.Subtitle}">
+                            <Run Text="Cashier " />
+                            <Run Text="{Binding CashierName}" FontWeight="SemiBold" />
+                            <Run Text=" · opened " />
+                            <Run Text="{Binding OpenedAt, StringFormat={}{0:dd MMM HH:mm}}" />
+                        </TextBlock>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <Button Content="Paid in" Style="{StaticResource Kacher.TouchButton}"
+                                Height="48" MinHeight="48" Padding="14,0" Margin="0,0,8,0"
+                                Command="{Binding AddPaidInCommand}" />
+                        <Button Content="Paid out" Style="{StaticResource Kacher.TouchButton}"
+                                Height="48" MinHeight="48" Padding="14,0" Margin="0,0,8,0"
+                                Command="{Binding AddPaidOutCommand}" />
+                        <Button Content="Refresh" Style="{StaticResource Kacher.TouchButton}"
+                                Height="48" MinHeight="48" Padding="14,0"
+                                Command="{Binding RefreshCommand}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Sales -->
+                <Border Grid.Column="0" Style="{StaticResource Kacher.Card}" Margin="0,0,12,0">
+                    <StackPanel>
+                        <TextBlock Text="Sales this shift" Style="{StaticResource Kacher.Title}" FontSize="17" />
+                        <Grid Margin="0,14,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition />
+                                <ColumnDefinition />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,0,14">
+                                <TextBlock Text="INVOICES" Style="{StaticResource Kacher.Label}" />
+                                <TextBlock Text="{Binding InvoiceCount}" Style="{StaticResource Kacher.MoneyLarge}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Margin="0,0,0,14">
+                                <TextBlock Text="GROSS" Style="{StaticResource Kacher.Label}" />
+                                <TextBlock Text="{Binding GrossSales, StringFormat={}{0:0.00}}"
+                                           Style="{StaticResource Kacher.MoneyLarge}"
+                                           Foreground="{DynamicResource Kacher.Accent}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Rectangle Height="1" Fill="{DynamicResource Kacher.Divider}" Margin="0,0,0,12" />
+
+                        <Grid Margin="0,0,0,6">
+                            <TextBlock Text="Net sales (ex-VAT)" Style="{StaticResource Kacher.Subtitle}" />
+                            <TextBlock Text="{Binding NetSales, StringFormat={}{0:0.00} EGP}"
+                                       HorizontalAlignment="Right" FontWeight="SemiBold" />
+                        </Grid>
+                        <Grid Margin="0,0,0,6">
+                            <TextBlock Text="Tax collected" Style="{StaticResource Kacher.Subtitle}" />
+                            <TextBlock Text="{Binding TaxTotal, StringFormat={}{0:0.00} EGP}"
+                                       HorizontalAlignment="Right" FontWeight="SemiBold" />
+                        </Grid>
+                        <Grid Margin="0,0,0,6">
+                            <TextBlock Text="Discounts" Style="{StaticResource Kacher.Subtitle}" />
+                            <TextBlock Text="{Binding DiscountTotal, StringFormat={}{0:0.00} EGP}"
+                                       HorizontalAlignment="Right" FontWeight="SemiBold" />
+                        </Grid>
+                        <Grid Margin="0,0,0,6">
+                            <TextBlock Text="Refunds" Style="{StaticResource Kacher.Subtitle}" />
+                            <TextBlock Text="{Binding RefundTotal, StringFormat={}{0:0.00} EGP}"
+                                       HorizontalAlignment="Right" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Kacher.Danger}" />
+                        </Grid>
+
+                        <Rectangle Height="1" Fill="{DynamicResource Kacher.Divider}" Margin="0,12" />
+
+                        <Grid Margin="0,0,0,6">
+                            <TextBlock Text="Cash" Style="{StaticResource Kacher.Subtitle}" />
+                            <TextBlock Text="{Binding CashTotal, StringFormat={}{0:0.00} EGP}"
+                                       HorizontalAlignment="Right" FontWeight="SemiBold" />
+                        </Grid>
+                        <Grid>
+                            <TextBlock Text="Card" Style="{StaticResource Kacher.Subtitle}" />
+                            <TextBlock Text="{Binding CardTotal, StringFormat={}{0:0.00} EGP}"
+                                       HorizontalAlignment="Right" FontWeight="SemiBold" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Drawer reconciliation -->
+                <Border Grid.Column="1" Style="{StaticResource Kacher.Card}" Margin="12,0,0,0">
+                    <StackPanel>
+                        <TextBlock Text="Drawer reconciliation" Style="{StaticResource Kacher.Title}" FontSize="17" />
+                        <TextBlock Text="Cash position" Style="{StaticResource Kacher.Caption}" Margin="0,2,0,12" />
+
+                        <Grid Margin="0,0,0,6">
+                            <TextBlock Text="Opening float" Style="{StaticResource Kacher.Subtitle}" />
+                            <TextBlock Text="{Binding OpeningFloat, StringFormat={}{0:0.00}}"
+                                       HorizontalAlignment="Right" />
+                        </Grid>
+                        <Grid Margin="0,0,0,6">
+                            <TextBlock Text="Cash sales" Style="{StaticResource Kacher.Subtitle}" />
+                            <TextBlock Text="{Binding CashTotal, StringFormat={}{0:0.00}}"
+                                       HorizontalAlignment="Right" />
+                        </Grid>
+                        <Grid Margin="0,0,0,6">
+                            <TextBlock Text="Paid in" Style="{StaticResource Kacher.Subtitle}" />
+                            <TextBlock Text="{Binding PaidIn, StringFormat=+{0:0.00}}"
+                                       HorizontalAlignment="Right" />
+                        </Grid>
+                        <Grid Margin="0,0,0,6">
+                            <TextBlock Text="Paid out" Style="{StaticResource Kacher.Subtitle}" />
+                            <TextBlock Text="{Binding PaidOut, StringFormat=-{0:0.00}}"
+                                       HorizontalAlignment="Right" />
+                        </Grid>
+
+                        <Border Background="{DynamicResource Kacher.SurfaceRaised}" CornerRadius="12"
+                                Padding="14" Margin="0,10,0,0">
+                            <Grid>
+                                <TextBlock Text="EXPECTED IN DRAWER" Style="{StaticResource Kacher.Label}"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding ExpectedCash, StringFormat={}{0:0.00} EGP}"
+                                           Style="{StaticResource Kacher.Money}" HorizontalAlignment="Right" />
+                            </Grid>
+                        </Border>
+
+                        <TextBlock Text="{Binding IntegrityHint}" Style="{StaticResource Kacher.Caption}"
+                                   Margin="0,12,0,0" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Footer actions -->
+            <Border Grid.Row="2" Background="{DynamicResource Kacher.SurfaceAlt}" CornerRadius="16"
+                    BorderBrush="{DynamicResource Kacher.Divider}" BorderThickness="1"
+                    Padding="16" Margin="0,12,0,0">
+                <Grid>
+                    <TextBlock Text="End of day closes the drawer session, stores an immutable Z-report and prints it."
+                               Style="{StaticResource Kacher.Caption}" VerticalAlignment="Center" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="Print Z-report" Style="{StaticResource Kacher.TouchButton}"
+                                Height="52" MinHeight="52" Padding="16,0" Margin="0,0,8,0"
+                                Command="{Binding PrintZReportCommand}" />
+                        <Button Content="Export PDF" Style="{StaticResource Kacher.TouchButton}"
+                                Height="52" MinHeight="52" Padding="16,0" Margin="0,0,8,0"
+                                Command="{Binding ExportZReportPdfCommand}" />
+                        <Button Content="Count &amp; close shift" Style="{StaticResource Kacher.DangerButton}"
+                                Height="52" MinHeight="52" Padding="20,0"
+                                Command="{Binding CloseShiftCommand}"
+                                IsEnabled="{Binding CanCloseShift}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

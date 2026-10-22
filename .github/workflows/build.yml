@@ -1,0 +1,33 @@
+name: build
+
+on:
+  push:
+    branches: [main, arena/**]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    name: Build (Windows / .NET 8)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore Kacher.sln
+
+      - name: Build
+        run: dotnet build Kacher.sln --configuration Release --no-restore
+
+      - name: Upload drop
+        uses: actions/upload-artifact@v4
+        with:
+          name: kacher-pos-release
+          path: src/Kacher.Pos/bin/Release/net8.0-windows
+          if-no-files-found: warn
