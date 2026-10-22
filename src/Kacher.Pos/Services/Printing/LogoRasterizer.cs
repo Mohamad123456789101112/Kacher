@@ -1,95 +1,107 @@
-using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
 namespace Kacher.Pos.Services.Printing;
 
+/// <summary>1-bit, row-major bitmap ready for <c>GS v 0</c>.</summary>
+public sealed record RasterImage(int WidthDots, int HeightDots, byte[] Data);
+
 /// <summary>
-/// Converts the store logo to an ESC/POS raster bitmap: 1 bit per pixel, rows padded to a byte,
-/// MSB first, black = 1 (the convention <c>GS v 0</c> expects).
-///
-/// WPF imaging APIs are used instead of System.Drawing so no extra native dependency ships with
-/// the terminal. Frozen <see cref="BitmapSource"/> instances are safe to use from any thread, which
-/// matters because printing happens off the dispatcher.
+/// Converts the store logo into the monochrome raster an ESC/POS printer can consume.
 /// </summary>
+/// <remarks>
+/// Thermal printers have no grey levels: every dot is on or off. The image is therefore scaled so
+/// one pixel maps to one dot (384 dots on an 80 mm roll, 288 on 58 mm), converted to 8-bit grey and
+/// thresholded at 50 %. That is enough for a logo; photographs need error-diffusion dithering, which
+/// is out of scope for a receipt header.
+/// </remarks>
 public static class LogoRasterizer
 {
-    public sealed record Raster(byte[] Data, int WidthBytes, int HeightDots);
+    private static readonly Dictionary<(string Path, int Width), RasterImage?> Cache = new();
 
-    private static readonly Dictionary<(string Path, int Width), Raster?> Cache = new();
-    private static readonly object Gate = new();
-
-    public static Raster? TryRasterize(string? path, int targetWidthDots = 384)
+    /// <summary>Returns <c>null</c> when the file is missing or cannot be decoded — never throws.</summary>
+    public static RasterImage? FromFile(string? path, int maxWidthDots)
     {
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path) || maxWidthDots <= 0)
         {
             return null;
         }
 
-        lock (Gate)
+        lock (Cache)
         {
-            if (Cache.TryGetValue((path, targetWidthDots), out var cached))
+            if (Cache.TryGetValue((path, maxWidthDots), out var cached))
             {
                 return cached;
             }
 
-            try
-            {
-                var raster = Rasterize(path, targetWidthDots);
-                Cache[(path, targetWidthDots)] = raster;
-                return raster;
-            }
-            catch (Exception)
-            {
-                // A broken logo must never block a sale.
-                Cache[(path, targetWidthDots)] = null;
-                return null;
-            }
+            var raster = Render(path, maxWidthDots);
+            Cache[(path, maxWidthDots)] = raster;
+            return raster;
         }
     }
 
-    private static Raster Rasterize(string path, int targetWidthDots)
+    private static RasterImage? Render(string path, int maxWidthDots)
     {
-        var image = new BitmapImage();
-        image.BeginInit();
-        image.UriSource = new Uri(path, UriKind.Absolute);
-        image.CacheOption = BitmapCacheOption.OnLoad;
-        image.CreateOptions = BitmapCreateOptions.None;
-        image.EndInit();
-        image.Freeze();
-
-        // Monochrome + scale to the target width, preserving aspect ratio.
-        var scale = Math.Min(1.0, (double)targetWidthDots / image.PixelWidth);
-        var scaled = new TransformedBitmap(image, new ScaleTransform(scale, scale));
-        scaled.Freeze();
-
-        var gray = new FormatConvertedBitmap(scaled, PixelFormats.Gray8, null, 0);
-        gray.Freeze();
-
-        var width = gray.PixelWidth;
-        var height = gray.PixelHeight;
-        var widthBytes = (width + 7) / 8;
-
-        var pixels = new byte[width * height];
-        gray.CopyPixels(pixels, width, 0);
-
-        var output = new byte[widthBytes * height];
-        const byte threshold = 160; // mid-grey: keeps thin strokes from disappearing
-
-        for (var y = 0; y < height; y++)
+        try
         {
-            var rowOffset = y * width;
-            var outOffset = y * widthBytes;
+            // OnLoad + a frozen frame: the file handle is released immediately and the bitmap can be
+            // touched from any thread, which matters because printing runs off the dispatcher.
+            var decoder = BitmapDecoder.Create(
+                new Uri(Path.GetFullPath(path)),
+                BitmapCreateOptions.None,
+                BitmapCacheOption.OnLoad);
 
-            for (var x = 0; x < width; x++)
+            var source = decoder.Frames[0];
+
+            // Only ever shrink: a small logo stays pixel-exact instead of being blown up.
+            var scale = Math.Min(1.0, (double)maxWidthDots / source.PixelWidth);
+            BitmapSource scaled = scale < 1.0
+                ? new TransformedBitmap(source, new ScaleTransform(scale, scale))
+                : source;
+
+            var gray = new FormatConvertedBitmap(scaled, PixelFormats.Gray8, null, 0);
+
+            // Freezing makes the bitmap immutable and safe to read from the printing thread.
+            try
             {
-                if (pixels[rowOffset + x] < threshold)
+                if (gray.CanFreeze)
                 {
-                    output[outOffset + (x >> 3)] |= (byte)(0x80 >> (x & 7));
+                    gray.Freeze();
                 }
             }
-        }
+            catch (InvalidOperationException)
+            {
+                // Non-freezable decoder output is still readable on the calling thread.
+            }
 
-        return new Raster(output, widthBytes, height);
+            var width = gray.PixelWidth;
+            var height = gray.PixelHeight;
+            var stride = width;
+            var pixels = new byte[stride * height];
+            gray.CopyPixels(pixels, stride, 0);
+
+            var bytesPerRow = (width + 7) / 8;
+            var data = new byte[bytesPerRow * height];
+
+            for (var y = 0; y < height; y++)
+            {
+                var rowStart = y * stride;
+
+                for (var x = 0; x < width; x++)
+                {
+                    // Gray8: 0 is black, 255 is white. Black pixels become set bits, MSB first.
+                    if (pixels[rowStart + x] < 128)
+                    {
+                        data[(y * bytesPerRow) + (x / 8)] |= (byte)(0x80 >> (x % 8));
+                    }
+                }
+            }
+
+            return new RasterImage(width, height, data);
+        }
+        catch (Exception ex) when (ex is IOException or NotSupportedException or ArgumentException or FileFormatException)
+        {
+            return null;
+        }
     }
 }

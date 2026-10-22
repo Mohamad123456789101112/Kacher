@@ -1,355 +1,391 @@
 using System.Globalization;
-using System.IO;
-using Kacher.Pos.Data;
+using System.Text;
+using Kacher.Pos.Infrastructure;
 using Kacher.Pos.Models;
-using Kacher.Pos.Services.Printing;
 
 namespace Kacher.Pos.Services.Pdf;
 
+/// <summary>Writes printable documents (receipt, Z-report, daily report) as PDF files on disk.</summary>
 public interface IPdfReceiptService
 {
+    /// <summary>Writes the customer receipt as a roll-shaped PDF and returns the full path.</summary>
     Task<string> CreateInvoicePdfAsync(Invoice invoice, HardwareConfig config, string? cashierName, CancellationToken ct = default);
 
-    Task<string> CreateDailyReportPdfAsync(DailyReport report, HardwareConfig config, CancellationToken ct = default);
-
-    /// <summary>Z-report as an A4/thermal PDF, mirroring the ESC/POS Z-report layout.</summary>
+    /// <summary>Writes the end-of-shift Z-report as A4 and returns the full path.</summary>
     Task<string> CreateShiftSummaryPdfAsync(ShiftSummary summary, HardwareConfig config, CancellationToken ct = default);
+
+    /// <summary>Writes the daily trading report as A4 and returns the full path.</summary>
+    Task<string> CreateDailyReportPdfAsync(DailyReport report, HardwareConfig config, CancellationToken ct = default);
 }
 
 /// <summary>
-/// Renders receipts and daily summaries to PDF using <see cref="SimplePdfWriter"/>.
-/// Receipt pages are sized to the roll (80 mm = 226.8 pt) so an emailed PDF looks exactly like the
-/// paper ticket; report pages are A4.
+/// Builds PDFs with <see cref="SimplePdfWriter"/>: a narrow page that mimics the paper roll for
+/// receipts, and A4 for management reports.
 /// </summary>
+/// <remarks>
+/// Everything runs on the thread pool and the file is written with <c>WriteAllBytesAsync</c>, so a
+/// 30-page daily report cannot stall the till. Failures surface as a message the caller shows in a
+/// notification — a report is never a reason to block a sale.
+/// </remarks>
 public sealed class PdfReceiptService : IPdfReceiptService
 {
-    private const double Margin = 10;
-    private const double LineHeight = 10.5;
-    private const double BodySize = 8;
-    private const double HeaderSize = 12;
+    private const double A4Width = 595;
+    private const double A4Height = 842;
+    private const double Margin = 40;
 
-    public async Task<string> CreateInvoicePdfAsync(
-        Invoice invoice, HardwareConfig config, string? cashierName, CancellationToken ct = default)
+    private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
+
+    private readonly IAppLog _log;
+
+    public PdfReceiptService(IAppLog log) => _log = log;
+
+    // ── Receipt (roll-shaped page) ───────────────────────────────────────────────────────────
+
+    public async Task<string> CreateInvoicePdfAsync(Invoice invoice, HardwareConfig config, string? cashierName, CancellationToken ct = default)
     {
-        var width = config.PaperWidth == PaperWidth.Mm58 ? 164.4 : 226.8;
-        var innerWidth = width - (Margin * 2);
+        ArgumentNullException.ThrowIfNull(invoice);
+        ArgumentNullException.ThrowIfNull(config);
 
-        // Approximate advance width of Helvetica at 8 pt (0.5 em) — good enough for a ticket.
-        var maxChars = Math.Max(24, (int)(innerWidth / (BodySize * 0.5)));
+        var width = config.PaperWidth == PaperWidth.Mm58 ? 164 : 227;
 
-        var lines = new List<PdfTextLine>();
+        // Estimate the height from the content so the page is exactly as tall as the ticket.
+        var lines = 18 + (invoice.Items.Count * 2) + (invoice.Payments.Count * 2);
+        var height = Math.Max(240, lines * 11.5);
 
-        // Layout top-down from y = 0; the whole block is shifted to positive user space afterwards
-        // because PDF's origin is the bottom-left corner of the page.
-        var cursor = new LayoutCursor(startY: 0);
+        var writer = new SimplePdfWriter(width, height);
+        var y = 14.0;
+        var left = 10.0;
+        var right = width - 10.0;
+        var columns = config.ReceiptColumns;
 
-        void Text(string text, bool bold = false, double size = BodySize, double? x = null, double? atY = null)
+        void Row(string text, bool bold = false, double size = 7.5)
         {
-            lines.Add(new PdfTextLine(text, x ?? Margin, atY ?? cursor.Next(size), size, bold));
+            writer.Text(left, y, Shorten(text, columns), size, bold);
+            y += size + 3;
         }
 
-        void Centre(string text, bool bold = false, double size = BodySize)
-            => lines.Add(new PdfTextLine(text, width / 2 - (text.Length * size * 0.25), cursor.Next(size), size, bold));
-
-        void Pair(string left, string right, bool bold = false)
+        void Pair(string label, string value, bool bold = false, double size = 7.5)
         {
-            var size = BodySize;
-            lines.Add(new PdfTextLine(left, Margin, cursor.Next(size), size, bold));
-            lines.Add(new PdfTextLine(right, width - Margin - (right.Length * size * 0.5), cursor.Same(), size, bold));
+            writer.Text(left, y, label, size, bold);
+            writer.TextRight(value, y, size, bold);
+            y += size + 3;
         }
 
-        void Rule(char c = '-') => Text(new string(c, maxChars));
+        void Divider(char c = '-') => Row(new string(c, columns));
 
-        Centre(config.StoreName, bold: true, size: HeaderSize);
-        if (!string.IsNullOrWhiteSpace(config.StoreAddress)) Centre(config.StoreAddress!);
-        if (!string.IsNullOrWhiteSpace(config.StorePhone)) Centre($"Tel: {config.StorePhone}");
-        if (!string.IsNullOrWhiteSpace(config.TaxRegistrationNumber)) Centre($"Tax Reg: {config.TaxRegistrationNumber}");
+        writer.TextCentre(config.StoreName, y, 11, bold: true);
+        y += 15;
 
-        Rule('=');
+        foreach (var line in new[] { config.StoreAddress, config.StorePhone })
+        {
+            if (!string.IsNullOrWhiteSpace(line))
+            {
+                writer.TextCentre(line, y, 7);
+                y += 10;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(config.TaxRegistrationNumber))
+        {
+            writer.TextCentre("Tax Reg " + config.TaxRegistrationNumber, y, 7);
+            y += 10;
+        }
+
+        y += 4;
+        Divider('=');
+
         Pair("Invoice", invoice.InvoiceNumber);
-        Pair("Date", invoice.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture));
-        if (!string.IsNullOrWhiteSpace(cashierName)) Pair("Cashier", cashierName);
-        Rule();
+        Pair("Date", invoice.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm", Invariant));
+
+        if (!string.IsNullOrWhiteSpace(cashierName))
+        {
+            Pair("Cashier", cashierName);
+        }
+
+        Divider();
 
         foreach (var item in invoice.Items)
         {
-            foreach (var nameLine in Wrap(item.ProductName, maxChars - 2))
-            {
-                Text(" " + nameLine);
-            }
-
-            var detail = $"{item.Quantity.ToString("0.##", CultureInfo.InvariantCulture)} x " +
-                         $"{item.UnitPrice.ToString("0.00", CultureInfo.InvariantCulture)}";
-            Pair("  " + detail, (item.TotalPrice + item.TaxAmount).ToString("0.00", CultureInfo.InvariantCulture));
+            Row(item.ProductName);
+            Pair($"  {item.Quantity.ToString("0.##", Invariant)} x {item.UnitPrice.ToString("0.00", Invariant)}",
+                item.TotalPrice.ToString("0.00", Invariant));
         }
 
-        Rule();
-        Pair("Subtotal", invoice.Subtotal.ToString("0.00", CultureInfo.InvariantCulture));
+        Divider();
+        Pair("Subtotal", (invoice.Subtotal + invoice.DiscountAmount).ToString("0.00", Invariant));
 
         if (invoice.DiscountAmount > 0)
         {
-            Pair("Discount", "-" + invoice.DiscountAmount.ToString("0.00", CultureInfo.InvariantCulture));
+            Pair("Discount", "-" + invoice.DiscountAmount.ToString("0.00", Invariant));
+            Pair("Net", invoice.Subtotal.ToString("0.00", Invariant));
         }
 
-        foreach (var band in invoice.Items.Where(i => i.TaxAmount != 0).GroupBy(i => i.TaxRate))
+        foreach (var band in invoice.Items.Where(i => i.TaxRate > 0).GroupBy(i => i.TaxRate).OrderBy(g => g.Key))
         {
-            Pair($"Tax {band.Key * 100:0.##}%", band.Sum(i => i.TaxAmount).ToString("0.00", CultureInfo.InvariantCulture));
+            var label = (band.Key * 100).ToString("0.##", Invariant) + "%";
+            Pair("VAT " + label, band.Sum(i => i.TaxAmount).ToString("0.00", Invariant));
         }
 
-        Rule('=');
-        Pair("TOTAL", $"{invoice.TotalAmount:0.00} EGP", bold: true);
+        Divider('=');
+
+        // Total on a shaded band, the way a paper ticket emphasises it.
+        writer.Rectangle(left, y - 8, right - left, 16, 0.88);
+        writer.Text(left + 2, y, "TOTAL EGP", 8.5, bold: true);
+        writer.TextRight(invoice.TotalAmount.ToString("0.00", Invariant), y, 8.5, bold: true);
+        y += 13;
+
         Pair("Paid by", invoice.PaymentMethod.ToString().ToUpperInvariant());
 
         if (invoice.AmountTendered > 0)
         {
-            Pair("Tendered", invoice.AmountTendered.ToString("0.00", CultureInfo.InvariantCulture));
+            Pair("Tendered", invoice.AmountTendered.ToString("0.00", Invariant));
+            Pair("Change", invoice.ChangeGiven.ToString("0.00", Invariant));
         }
 
-        if (invoice.ChangeGiven > 0)
-        {
-            Pair("CHANGE", invoice.ChangeGiven.ToString("0.00", CultureInfo.InvariantCulture), bold: true);
-        }
-
-        Rule();
         if (!string.IsNullOrWhiteSpace(config.ReceiptFooter))
         {
-            foreach (var footerLine in Wrap(config.ReceiptFooter!, maxChars))
+            y += 4;
+            Divider();
+
+            foreach (var line in Wrap(config.ReceiptFooter!, columns))
             {
-                Centre(footerLine);
+                writer.TextCentre(line, y, 7);
+                y += 9;
             }
         }
 
-        Centre("Reprinted from Kacher POS", size: 7);
-
-        var (pageLines, pageHeight) = Normalize(lines, Margin);
-        var page = new PdfPage(width, pageHeight, pageLines);
-
-        var path = Path.Combine(DatabaseConnectionFactory.ReportsDirectory, $"{invoice.InvoiceNumber}.pdf");
-        await SimplePdfWriter.WriteAsync(path, new[] { page }, ct).ConfigureAwait(false);
-        return path;
+        var bytes = writer.Build($"Receipt {invoice.InvoiceNumber}");
+        return await WriteAsync($"receipt-{invoice.InvoiceNumber}.pdf", bytes, ct).ConfigureAwait(false);
     }
+
+    // ── Z-report ─────────────────────────────────────────────────────────────────────────────
+
+    public async Task<string> CreateShiftSummaryPdfAsync(ShiftSummary summary, HardwareConfig config, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(summary);
+
+        var writer = new SimplePdfWriter(A4Width, A4Height);
+
+        writer.TextCentre(config.StoreName, 60, 16, bold: true);
+        writer.TextCentre("Z-REPORT — end of shift", 80, 12, bold: true);
+
+        var y = 120.0;
+        y = WriteKeyValueBlock(writer, y,
+            ("Shift", summary.ShiftNumber),
+            ("Cashier", summary.CashierName),
+            ("Opened", summary.OpenedAt.ToString("dd/MM/yyyy HH:mm", Invariant)),
+            ("Closed", summary.ClosedAt.ToString("dd/MM/yyyy HH:mm", Invariant)));
+
+        y += 10;
+        y = WriteSectionTitle(writer, y, "Trade");
+        y = WriteKeyValueBlock(writer, y,
+            ("Invoices", summary.InvoiceCount.ToString(Invariant)),
+            ("Items sold", summary.ItemCount.ToString(Invariant)),
+            ("Gross sales", Money(summary.GrossSales)),
+            ("Discounts", "-" + Money(summary.DiscountTotal)),
+            ("Refunds", "-" + Money(summary.RefundTotal)),
+            ("Net sales", Money(summary.NetSales)),
+            ("VAT", Money(summary.TaxTotal)),
+            ("Average basket", Money(summary.AverageBasket)));
+
+        if (summary.TaxBands.Count > 0)
+        {
+            y += 10;
+            y = WriteSectionTitle(writer, y, "Tax breakdown");
+            y = WriteTable(
+                writer,
+                y,
+                ["Rate", "Net", "Tax"],
+                summary.TaxBands.Select(b => new[] { b.Label, Money(b.NetAmount), Money(b.TaxAmount) }).ToList());
+        }
+
+        y += 10;
+        y = WriteSectionTitle(writer, y, "Tender mix");
+        y = WriteKeyValueBlock(writer, y,
+            ("Cash", Money(summary.CashTotal)),
+            ("Card", Money(summary.CardTotal)),
+            ("Split", Money(summary.SplitTotal)));
+
+        y += 10;
+        y = WriteSectionTitle(writer, y, "Cash reconciliation");
+        y = WriteKeyValueBlock(writer, y,
+            ("Opening float", Money(summary.OpeningFloat)),
+            ("Cash sales", Money(summary.CashTotal)),
+            ("Paid in", Money(summary.PaidIn)),
+            ("Paid out", "-" + Money(summary.PaidOut)),
+            ("Expected in drawer", Money(summary.ExpectedCash)),
+            ("Counted", Money(summary.CountedCash)),
+            ("Difference", Money(summary.CashDifference)));
+
+        y += 20;
+        writer.Text(Margin, y, summary.CashDifference == 0
+            ? "Drawer balanced."
+            : summary.CashDifference > 0
+                ? "Overage — investigate before banking."
+                : "Shortage — recount the drawer before banking.", 10, bold: true);
+
+        y += 40;
+        writer.Rule(y);
+        writer.Text(Margin, y + 16, "Cashier signature", 8);
+        writer.Text(A4Width / 2, y + 16, "Manager signature", 8);
+
+        var bytes = writer.Build($"Z-report {summary.ShiftNumber}");
+        return await WriteAsync($"zreport-{summary.ShiftNumber}.pdf", bytes, ct).ConfigureAwait(false);
+    }
+
+    // ── Daily report ─────────────────────────────────────────────────────────────────────────
 
     public async Task<string> CreateDailyReportPdfAsync(DailyReport report, HardwareConfig config, CancellationToken ct = default)
     {
-        const double width = 595;   // A4 portrait, points
-        const double height = 842;
-        const double margin = 40;
-        const double size = 10;
-        var cursor = new LayoutCursor(startY: height - margin);
-        var lines = new List<PdfTextLine>();
+        ArgumentNullException.ThrowIfNull(report);
 
-        void Line(string text, bool bold = false, double fontSize = size, double x = margin)
-            => lines.Add(new PdfTextLine(text, x, cursor.Next(fontSize), fontSize, bold));
+        var writer = new SimplePdfWriter(A4Width, A4Height);
 
-        void Row(string left, string right, bool bold = false)
-        {
-            Line(left, bold);
-            lines.Add(new PdfTextLine(right, width - margin - (right.Length * size * 0.5), cursor.Same(), size, bold));
-        }
+        writer.TextCentre(config.StoreName, 60, 16, bold: true);
+        writer.TextCentre($"Daily report — {report.Date:dd/MM/yyyy}", 80, 12, bold: true);
 
-        Line(config.StoreName, bold: true, fontSize: 18);
-        Line("Daily Sales Summary", fontSize: 13);
-        Line($"Business date: {report.Date:dd MMM yyyy}    Generated: {DateTime.Now:dd MMM yyyy HH:mm}");
-        cursor.Skip(8);
+        var y = 125.0;
 
-        Line("Sales", bold: true, fontSize: 12);
-        Row("Invoices", report.InvoiceCount.ToString(CultureInfo.InvariantCulture));
-        Row("Gross sales", $"{report.GrossSales:0.00} EGP");
-        Row("Net sales (excl. tax)", $"{report.NetSales:0.00} EGP");
-        Row("Discounts", $"{report.DiscountTotal:0.00} EGP");
-        Row("Refunds", $"{report.RefundTotal:0.00} EGP");
-        Row("Tax collected", $"{report.TaxTotal:0.00} EGP");
-        Row("Average basket", $"{report.AverageBasket:0.00} EGP", bold: true);
-        cursor.Skip(10);
-
-        Line("Tenders", bold: true, fontSize: 12);
-        Row("Cash", $"{report.CashTotal:0.00} EGP");
-        Row("Card", $"{report.CardTotal:0.00} EGP");
-        cursor.Skip(10);
-
-        if (report.TaxBands.Count > 0)
-        {
-            Line("Tax breakdown", bold: true, fontSize: 12);
-            foreach (var band in report.TaxBands)
-            {
-                Row($"{band.Label} — net {band.NetAmount:0.00}", $"{band.TaxAmount:0.00} EGP");
-            }
-            cursor.Skip(10);
-        }
+        y = WriteKeyValueBlock(writer, y,
+            ("Invoices", report.InvoiceCount.ToString(Invariant)),
+            ("Gross sales", Money(report.GrossSales)),
+            ("Discounts", "-" + Money(report.DiscountTotal)),
+            ("Refunds", "-" + Money(report.RefundTotal)),
+            ("Net sales", Money(report.NetSales)),
+            ("VAT", Money(report.TaxTotal)),
+            ("Cash", Money(report.CashTotal)),
+            ("Card", Money(report.CardTotal)),
+            ("Average basket", Money(report.AverageBasket)));
 
         if (report.TopProducts.Count > 0)
         {
-            Line("Top products", bold: true, fontSize: 12);
-            var rank = 1;
-            foreach (var product in report.TopProducts)
-            {
-                Row($"{rank++}. {product.Name}  x{product.Quantity:0.##}", $"{product.Revenue:0.00} EGP");
-            }
-            cursor.Skip(10);
+            y += 14;
+            y = WriteSectionTitle(writer, y, "Top products");
+            y = WriteTable(
+                writer,
+                y,
+                ["Product", "Qty", "Revenue"],
+                report.TopProducts.Take(15)
+                    .Select(p => new[] { p.Name, p.Quantity.ToString("0.##", Invariant), Money(p.Revenue) })
+                    .ToList());
         }
 
         if (report.Hourly.Count > 0)
         {
-            Line("Hourly revenue", bold: true, fontSize: 12);
-            const double chartLeft = margin + 60;
-            const double chartWidth = width - margin * 2 - 80;
-            var max = report.Hourly.Max(h => h.Revenue);
-
-            foreach (var hour in report.Hourly)
-            {
-                Line($"{hour.Hour:00}:00", x: margin);
-                var barWidth = max <= 0 ? 0 : (double)(hour.Revenue / max) * chartWidth;
-                lines.Add(new PdfTextLine(new string('#', Math.Max(1, (int)(barWidth / 4))),
-                    chartLeft, cursor.Same(), size));
-                lines.Add(new PdfTextLine($"{hour.Revenue:0.00}", width - margin - 40, cursor.Same(), size));
-                cursor.Skip(size);
-            }
+            y += 14;
+            y = WriteSectionTitle(writer, y, "Sales by hour");
+            y = WriteTable(
+                writer,
+                y,
+                ["Hour", "Invoices", "Revenue"],
+                report.Hourly.Select(h => new[]
+                {
+                    $"{h.Hour:00}:00",
+                    h.InvoiceCount.ToString(Invariant),
+                    Money(h.Revenue)
+                }).ToList());
         }
 
-        cursor.Skip(14);
-        Line("Z-Report signature: ______________________", fontSize: 9);
-        Line($"Hardware profile: {config.ProfileName} ({ReceiptDocumentBuilder.DescribeTarget(config)})", fontSize: 8);
+        var bytes = writer.Build($"Daily report {report.Date:yyyy-MM-dd}");
+        return await WriteAsync($"daily-{report.Date:yyyy-MM-dd}.pdf", bytes, ct).ConfigureAwait(false);
+    }
 
-        var path = Path.Combine(DatabaseConnectionFactory.ReportsDirectory, $"daily-{report.Date:yyyyMMdd}.pdf");
-        await SimplePdfWriter.WriteAsync(path, new[] { new PdfPage(width, height, lines) }, ct).ConfigureAwait(false);
+    // ── Shared layout helpers ───────────────────────────────────────────────────────────────
+
+    private static double WriteSectionTitle(SimplePdfWriter writer, double y, string title)
+    {
+        writer.Text(Margin, y, title.ToUpperInvariant(), 10, bold: true);
+        y += 6;
+        writer.Rule(y);
+        return y + 16;
+    }
+
+    private static double WriteKeyValueBlock(SimplePdfWriter writer, double y, params (string Key, string Value)[] rows)
+    {
+        foreach (var (key, value) in rows)
+        {
+            writer.Text(Margin, y, key, 9);
+            writer.TextRight(value, y, 9);
+            y += 14;
+        }
+
+        return y;
+    }
+
+    private static double WriteTable(SimplePdfWriter writer, double y, string[] headers, List<string[]> rows)
+    {
+        writer.Text(Margin, y, headers[0], 8.5, bold: true);
+        writer.TextRight(headers[^1], y, 8.5, bold: true);
+
+        if (headers.Length == 3)
+        {
+            writer.Text(Math.Max(Margin + 90, writer.RightEdge - 110), y, headers[1], 8.5, bold: true);
+        }
+
+        y += 5;
+        writer.Rule(y);
+        y += 14;
+
+        foreach (var row in rows)
+        {
+            writer.Text(Margin, y, Shorten(row[0], 46), 8.5);
+
+            if (row.Length == 3)
+            {
+                writer.Text(Math.Max(Margin + 90, writer.RightEdge - 110), y, row[1], 8.5);
+            }
+
+            writer.TextRight(row[^1], y, 8.5);
+            y += 13;
+        }
+
+        return y;
+    }
+
+    private async Task<string> WriteAsync(string fileName, byte[] bytes, CancellationToken ct)
+    {
+        var directory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            "Kacher",
+            "Reports");
+
+        Directory.CreateDirectory(directory);
+
+        var path = Path.Combine(directory, fileName);
+        await File.WriteAllBytesAsync(path, bytes, ct).ConfigureAwait(false);
+
+        _log.Info($"PDF written: {path} ({bytes.Length} bytes).");
         return path;
     }
 
-    public async Task<string> CreateShiftSummaryPdfAsync(
-        ShiftSummary summary, HardwareConfig config, CancellationToken ct = default)
+    private static string Money(decimal value) => value.ToString("0.00", Invariant) + " EGP";
+
+    private static string Shorten(string? value, int max) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Length <= max ? value : value[..(max - 1)] + ".";
+
+    private static IEnumerable<string> Wrap(string text, int width)
     {
-        const double width = 420;
-        const double margin = 24;
-        const double size = 9;
-
-        var cursor = new LayoutCursor(startY: 0);
-        var lines = new List<PdfTextLine>();
-        var rightEdge = width - margin;
-
-        void Line(string text, bool bold = false, double fontSize = size, double x = margin)
-            => lines.Add(new PdfTextLine(text, x, cursor.Next(fontSize), fontSize, bold));
-
-        void Row(string left, string right, bool bold = false)
+        foreach (var raw in text.Split('\n'))
         {
-            Line(left, bold);
-            lines.Add(new PdfTextLine(right, rightEdge - (right.Length * size * 0.5), cursor.Same(), size, bold));
-        }
+            var current = new StringBuilder();
 
-        void Rule() => Line(new string('-', (int)((width - (margin * 2)) / (size * 0.5))));
-
-        Line(config.StoreName, bold: true, fontSize: 16);
-        Line("SHIFT CLOSING REPORT (Z-REPORT)", bold: true, fontSize: 12);
-        Rule();
-        Row("Shift", summary.ShiftNumber);
-        Row("Cashier", summary.CashierName);
-        Row("Opened", summary.OpenedAt.ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture));
-        Row("Closed", summary.ClosedAt.ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture));
-        Rule();
-
-        Row("Invoices", summary.InvoiceCount.ToString(CultureInfo.InvariantCulture));
-        Row("Items sold", summary.ItemCount.ToString(CultureInfo.InvariantCulture));
-        Row("Gross sales", $"{summary.GrossSales:0.00} EGP");
-        Row("Net sales", $"{summary.NetSales:0.00} EGP");
-        Row("Discounts", $"{summary.DiscountTotal:0.00} EGP");
-        Row("Refunds", $"{summary.RefundTotal:0.00} EGP");
-        Row("Tax collected", $"{summary.TaxTotal:0.00} EGP");
-        Rule();
-
-        Row("Cash", $"{summary.CashTotal:0.00} EGP");
-        Row("Card", $"{summary.CardTotal:0.00} EGP");
-        Rule();
-
-        Row("Opening float", $"{summary.OpeningFloat:0.00} EGP");
-        Row("Paid in", $"{summary.PaidIn:0.00} EGP");
-        Row("Paid out", $"{summary.PaidOut:0.00} EGP");
-        Row("Expected drawer", $"{summary.ExpectedCash:0.00} EGP");
-        Row("Counted", $"{summary.CountedCash:0.00} EGP");
-        Row("Difference", $"{summary.CashDifference:0.00} EGP", bold: true);
-        Rule();
-        Row("Average basket", $"{summary.AverageBasket:0.00} EGP");
-        cursor.Skip(16);
-        Line("Cashier signature: ______________________", fontSize: 8);
-        Line("Manager signature: ______________________", fontSize: 8);
-
-        var (pageLines, pageHeight) = Normalize(lines, margin);
-
-        var path = Path.Combine(
-            DatabaseConnectionFactory.ReportsDirectory,
-            $"zreport-{summary.ShiftNumber.Replace('/', '-')}.pdf");
-
-        await SimplePdfWriter.WriteAsync(path, new[] { new PdfPage(width, pageHeight, pageLines) }, ct)
-            .ConfigureAwait(false);
-
-        return path;
-    }
-
-    /// <summary>Shifts a top-down layout into PDF user space and returns the required page height.</summary>
-    private static (IReadOnlyList<PdfTextLine> Lines, double Height) Normalize(
-        IReadOnlyList<PdfTextLine> lines, double margin)
-    {
-        if (lines.Count == 0)
-        {
-            return (Array.Empty<PdfTextLine>(), 120);
-        }
-
-        var shift = margin - lines.Min(l => l.Y);
-        var shifted = lines.Select(l => l with { Y = l.Y + shift }).ToList();
-        return (shifted, shifted.Max(l => l.Y) + margin + LineHeight);
-    }
-
-    public static IReadOnlyList<string> Wrap(string text, int maxChars)
-    {
-        var result = new List<string>();
-        var current = new System.Text.StringBuilder();
-
-        foreach (var word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-        {
-            if (current.Length > 0 && current.Length + 1 + word.Length > maxChars)
+            foreach (var word in raw.Split(' ', StringSplitOptions.RemoveEmptyEntries))
             {
-                result.Add(current.ToString());
-                current.Clear();
+                if (current.Length + word.Length + 1 > width)
+                {
+                    yield return current.ToString();
+                    current.Clear();
+                }
+
+                if (current.Length > 0)
+                {
+                    current.Append(' ');
+                }
+
+                current.Append(word);
             }
 
-            if (current.Length > 0)
-            {
-                current.Append(' ');
-            }
-
-            current.Append(word);
-
-            while (current.Length > maxChars)
-            {
-                result.Add(current.ToString(0, maxChars));
-                current.Remove(0, maxChars);
-            }
+            yield return current.ToString();
         }
-
-        if (current.Length > 0)
-        {
-            result.Add(current.ToString());
-        }
-
-        return result.Count == 0 ? new[] { string.Empty } : result;
-    }
-
-    /// <summary>Tracks the current baseline while emitting lines; PDF origin is bottom-left.</summary>
-    private sealed class LayoutCursor
-    {
-        public LayoutCursor(double startY = 0) => Position = startY;
-
-        public double Position { get; private set; }
-
-        private double _last;
-
-        public double Next(double fontSize)
-        {
-            _last = Position;
-            Position -= LineHeight;
-            return _last;
-        }
-
-        public double Same() => _last;
-
-        public void Skip(double amount) => Position -= amount;
     }
 }

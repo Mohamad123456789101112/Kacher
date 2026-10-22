@@ -37,25 +37,28 @@ public sealed class UsbEscPosTransport : IReceiptTransport
 
     public bool IsConnected => FindDevicePaths().Count > 0;
 
-    public async Task SendAsync(ReadOnlyMemory<byte> payload, CancellationToken ct = default)
+    public Task SendAsync(byte[] payload, CancellationToken ct = default)
     {
-        var path = FindDevicePaths().FirstOrDefault()
-                   ?? throw new IOException(
-                       "No USB printer interface found. Bind the printer to usbprint.sys, or switch " +
-                       "the connection type to Windows driver / Network.");
+        // CreateFile/WriteFile are blocking Win32 calls, so the whole job runs on the thread pool.
+        return Task.Run(() =>
+        {
+            var path = FindDevicePaths().FirstOrDefault()
+                       ?? throw new TransportException(
+                           "No USB printer interface found. Bind the printer to usbprint.sys, or switch " +
+                           "the connection type to Windows driver / Network.");
 
-        await Task.Run(() => WriteToDevice(path, payload.ToArray()), ct).ConfigureAwait(false);
+            WriteToDevice(path, payload);
+        }, CancellationToken.None);
     }
 
     public Task<TransportProbe> ProbeAsync(CancellationToken ct = default)
     {
         var devices = FindDevicePaths();
-        return Task.FromResult(devices.Count == 0
-            ? TransportProbe.Offline("No USB printer interface detected.")
-            : TransportProbe.Online($"{devices.Count} USB printer interface(s) found", TimeSpan.Zero));
-    }
 
-    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        return Task.FromResult(devices.Count == 0
+            ? TransportProbe.Fail("No USB printer interface detected.")
+            : TransportProbe.Ok($"{devices.Count} USB printer interface(s) found."));
+    }
 
     // ── Device I/O ───────────────────────────────────────────────────────────────────────────
 

@@ -1,95 +1,127 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
-using Microsoft.Win32;
+using Kacher.Pos.Infrastructure;
 
 namespace Kacher.Pos.Services.Hardware.Transports;
 
 /// <summary>
-/// Sends the ESC/POS payload through the Windows print spooler as a <b>RAW</b> job.
-///
-/// Why bother, when a "driver" is supposed to render? Because the vendor driver still needs to be
-/// installed for the queue to exist, but we bypass its rendering: <c>pDatatype = "RAW"</c> tells the
-/// spooler to pass our bytes to the device untouched. This is the most compatible path — it works
-/// with USB, LPT, and any vendor port monitor — while still skipping GDI text rendering.
-///
-/// The winspool calls are synchronous by nature, so the whole job runs on a pool thread.
+/// Sends raw ESC/POS bytes through the Windows print spooler using the <c>RAW</c> data type.
 /// </summary>
+/// <remarks>
+/// <para>
+/// This is the transport used for both <c>WindowsDriver</c> and <c>Usb</c> connection types: a
+/// USB ESC/POS printer always has a spooler queue on Windows, and writing to that queue in RAW mode
+/// forwards our bytes untouched instead of letting a rendering driver rasterise a GDI page.
+/// </para>
+/// <para>
+/// All Win32 calls here are synchronous, so the work is pushed onto the thread pool. That keeps the
+/// UI thread free (the 60 fps requirement) without pretending the spooler API has an async form.
+/// </para>
+/// </remarks>
 public sealed class WindowsRawPrinterTransport : IReceiptTransport
 {
+    private const int MaxChunk = 32 * 1024;
+
     private readonly string _printerName;
+    private readonly IAppLog _log;
 
-    public WindowsRawPrinterTransport(string printerName) => _printerName = printerName;
-
-    public string Description => $"Windows spooler (RAW) → {_printerName}";
-
-    public bool IsConnected => !string.IsNullOrWhiteSpace(_printerName);
-
-    public Task SendAsync(ReadOnlyMemory<byte> payload, CancellationToken ct = default)
+    public WindowsRawPrinterTransport(string printerName, IAppLog log)
     {
-        var bytes = payload.ToArray();
-        var documentName = $"Kacher POS {DateTime.Now:HH:mm:ss}";
+        _printerName = printerName;
+        _log = log;
+    }
 
-        return Task.Run(() => SendRaw(_printerName, documentName, bytes), ct);
+    public string Description => $"Windows spooler (RAW) → \"{_printerName}\"";
+
+    public Task SendAsync(byte[] payload, CancellationToken ct = default)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return Task.FromException(new TransportException("The Windows spooler transport requires Windows."));
+        }
+
+        if (string.IsNullOrWhiteSpace(_printerName))
+        {
+            return Task.FromException(new TransportException("No printer queue name is configured."));
+        }
+
+        // Task.Run keeps the blocking spooler calls off the dispatcher; the token is checked
+        // between chunks so a cancelled job stops early instead of holding the queue.
+        return Task.Run(() => SendBlocking(payload, ct), CancellationToken.None);
     }
 
     public Task<TransportProbe> ProbeAsync(CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_printerName))
+        if (!OperatingSystem.IsWindows())
         {
-            return Task.FromResult(TransportProbe.Offline("No printer queue configured."));
+            return Task.FromResult(TransportProbe.Fail("Windows spooler unavailable on this OS."));
         }
 
         return Task.Run(() =>
         {
-            if (!OpenPrinter(_printerName, out var handle, IntPtr.Zero))
+            if (!OpenPrinter(_printerName, out var handle, nint.Zero))
             {
                 var error = new Win32Exception(Marshal.GetLastWin32Error());
-                return TransportProbe.Offline($"Queue unreachable: {error.Message}");
+                return TransportProbe.Fail($"Queue \"{_printerName}\" not found: {error.Message}");
             }
 
-            ClosePrinter(handle);
-
-            // A queue with jobs parked in "Error" state is still reachable, so surface job count.
-            var pending = CountPendingJobs(_printerName);
-            return TransportProbe.Online(
-                pending > 0 ? $"Queue ready ({pending} pending)" : "Queue ready", TimeSpan.Zero);
+            try
+            {
+                return TransportProbe.Ok($"Queue \"{_printerName}\" is available.");
+            }
+            finally
+            {
+                ClosePrinter(handle);
+            }
         }, ct);
     }
 
-    private static void SendRaw(string printerName, string documentName, byte[] bytes)
+    private void SendBlocking(byte[] payload, CancellationToken ct)
     {
-        if (!OpenPrinter(printerName, out var printer, IntPtr.Zero))
+        if (!OpenPrinter(_printerName, out var printer, nint.Zero))
         {
-            throw new Win32Exception(Marshal.GetLastWin32Error(), $"Cannot open printer '{printerName}'.");
+            throw new TransportException(
+                $"Cannot open printer queue \"{_printerName}\": {new Win32Exception(Marshal.GetLastWin32Error()).Message}");
         }
 
         try
         {
             var docInfo = new DocInfo1
             {
-                DocumentName = documentName,
+                DocumentName = "Kacher POS receipt",
                 OutputFile = null,
                 DataType = "RAW"
             };
 
             if (StartDocPrinter(printer, 1, ref docInfo) == 0)
             {
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "StartDocPrinter failed.");
+                throw new TransportException(
+                    $"StartDocPrinter failed: {new Win32Exception(Marshal.GetLastWin32Error()).Message}");
             }
 
             try
             {
-                if (!StartPagePrinter(printer))
-                {
-                    throw new Win32Exception(Marshal.GetLastWin32Error(), "StartPagePrinter failed.");
-                }
+                StartPagePrinter(printer);
 
                 try
                 {
-                    if (!WritePrinter(printer, bytes, bytes.Length, out var written) || written != bytes.Length)
+                    var offset = 0;
+                    while (offset < payload.Length)
                     {
-                        throw new Win32Exception(Marshal.GetLastWin32Error(),
-                            $"WritePrinter wrote {written}/{bytes.Length} bytes.");
+                        ct.ThrowIfCancellationRequested();
+
+                        var chunk = Math.Min(MaxChunk, payload.Length - offset);
+                        var buffer = new byte[chunk];
+                        Buffer.BlockCopy(payload, offset, buffer, 0, chunk);
+
+                        if (!WritePrinter(printer, buffer, chunk, out var written) || written != chunk)
+                        {
+                            throw new TransportException(
+                                $"WritePrinter wrote {written}/{chunk} bytes: " +
+                                $"{new Win32Exception(Marshal.GetLastWin32Error()).Message}");
+                        }
+
+                        offset += chunk;
                     }
                 }
                 finally
@@ -106,49 +138,43 @@ public sealed class WindowsRawPrinterTransport : IReceiptTransport
         {
             ClosePrinter(printer);
         }
+
+        _log.Debug($"Spooled {payload.Length} bytes to \"{_printerName}\".");
     }
 
-    private static int CountPendingJobs(string printerName)
-    {
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(
-                $@"Software\Kacher\PrintQueues\{printerName}");
-            return key?.GetValue("PendingJobs") is int count ? count : 0;
-        }
-        catch (Exception)
-        {
-            return 0;
-        }
-    }
+    // ── Win32 ───────────────────────────────────────────────────────────────────────────────
 
-    // ── winspool.drv ─────────────────────────────────────────────────────────────────────────
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct DocInfo1
     {
-        [MarshalAs(UnmanagedType.LPWStr)] public string DocumentName;
-        [MarshalAs(UnmanagedType.LPWStr)] public string? OutputFile;
-        [MarshalAs(UnmanagedType.LPWStr)] public string DataType;
+        [MarshalAs(UnmanagedType.LPWStr)]
+        public string DocumentName;
+
+        [MarshalAs(UnmanagedType.LPWStr)]
+        public string? OutputFile;
+
+        [MarshalAs(UnmanagedType.LPWStr)]
+        public string DataType;
     }
 
     [DllImport("winspool.drv", EntryPoint = "OpenPrinterW", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern bool OpenPrinter(string printerName, out IntPtr printer, IntPtr defaults);
+    private static extern bool OpenPrinter(string printerName, out nint handle, nint defaults);
 
-    [DllImport("winspool.drv", EntryPoint = "ClosePrinter", SetLastError = true)]
-    private static extern bool ClosePrinter(IntPtr printer);
+    [DllImport("winspool.drv", SetLastError = true)]
+    private static extern bool ClosePrinter(nint handle);
 
     [DllImport("winspool.drv", EntryPoint = "StartDocPrinterW", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern int StartDocPrinter(IntPtr printer, int level, ref DocInfo1 docInfo);
+    private static extern int StartDocPrinter(nint handle, int level, ref DocInfo1 docInfo);
 
-    [DllImport("winspool.drv", EntryPoint = "EndDocPrinter", SetLastError = true)]
-    private static extern bool EndDocPrinter(IntPtr printer);
+    [DllImport("winspool.drv", SetLastError = true)]
+    private static extern bool EndDocPrinter(nint handle);
 
-    [DllImport("winspool.drv", EntryPoint = "StartPagePrinter", SetLastError = true)]
-    private static extern bool StartPagePrinter(IntPtr printer);
+    [DllImport("winspool.drv", SetLastError = true)]
+    private static extern bool StartPagePrinter(nint handle);
 
-    [DllImport("winspool.drv", EntryPoint = "EndPagePrinter", SetLastError = true)]
-    private static extern bool EndPagePrinter(IntPtr printer);
+    [DllImport("winspool.drv", SetLastError = true)]
+    private static extern bool EndPagePrinter(nint handle);
 
-    [DllImport("winspool.drv", EntryPoint = "WritePrinter", SetLastError = true)]
-    private static extern bool WritePrinter(IntPtr printer, byte[] buffer, int count, out int written);
+    [DllImport("winspool.drv", SetLastError = true)]
+    private static extern bool WritePrinter(nint handle, byte[] buffer, int count, out int written);
 }

@@ -43,6 +43,12 @@ public interface IBarcodeScannerService : IDisposable
     /// <summary>Feed an explicit terminator (Enter / Tab). Emits immediately.</summary>
     void FeedTerminator();
 
+    /// <summary>
+    /// Resolves a wedge burst that arrived without a trailing Enter, once the inter-key timeout has
+    /// elapsed. Called from a short shell timer; a no-op when the buffer is empty.
+    /// </summary>
+    void FlushIfIdle();
+
     Task StartAsync(HardwareConfig config, CancellationToken ct = default);
 
     Task StopAsync();

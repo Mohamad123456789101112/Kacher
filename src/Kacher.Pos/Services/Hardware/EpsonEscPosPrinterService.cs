@@ -1,211 +1,194 @@
 using System.Diagnostics;
-using System.IO;
-using Kacher.Pos.Data;
 using Kacher.Pos.Infrastructure;
 using Kacher.Pos.Models;
+using Kacher.Pos.Services.Hardware.EscPos;
 using Kacher.Pos.Services.Hardware.Transports;
 using Kacher.Pos.Services.Printing;
 
 namespace Kacher.Pos.Services.Hardware;
 
+/// <summary>Outcome of one print job. The message is written for the cashier, not the developer.</summary>
 public sealed record PrintResult(bool Success, string Message, int Bytes, TimeSpan Duration)
 {
-    public static PrintResult Fail(string message) => new(false, message, 0, TimeSpan.Zero);
+    public static PrintResult Failed(string message) => new(false, message, 0, TimeSpan.Zero);
 }
 
-/// <summary>
-/// Native ESC/POS engine. Everything the till needs to talk to a thermal printer, a cash drawer and
-/// a barcode scanner lives behind this interface.
-/// </summary>
+/// <summary>Result of a reachability check, surfaced by the status bar and the settings screen.</summary>
+public sealed record ProbeResult(bool IsAvailable, string Message);
+
 public interface IReceiptPrinter
 {
+    /// <summary>
+    /// Prints the customer receipt for a committed sale, including the drawer kick when the
+    /// configured policy allows it. Never throws for hardware reasons — the sale is already saved.
+    /// </summary>
     Task<PrintResult> PrintSaleReceiptAsync(
-        Invoice invoice, HardwareConfig config, User? cashier, Shift? shift, CancellationToken ct = default);
+        Invoice invoice,
+        HardwareConfig config,
+        User? cashier,
+        Shift? shift,
+        CancellationToken ct = default);
 
     Task<PrintResult> PrintZReportAsync(ShiftSummary summary, HardwareConfig config, CancellationToken ct = default);
 
     Task<PrintResult> PrintTestAsync(HardwareConfig config, CancellationToken ct = default);
 
+    /// <summary>Pulses the drawer without printing. Used by the manual "open drawer" button.</summary>
     Task<PrintResult> OpenDrawerAsync(HardwareConfig config, CancellationToken ct = default);
 
-    Task<TransportProbe> ProbeAsync(HardwareConfig config, CancellationToken ct = default);
+    /// <summary>Cheap reachability probe; does not print anything.</summary>
+    Task<ProbeResult> ProbeAsync(HardwareConfig config, CancellationToken ct = default);
 }
 
 /// <summary>
-/// Sends pre-built ESC/POS streams to the configured device.
-///
-/// Concurrency: a <see cref="SemaphoreSlim"/> serialises jobs. Thermal printers have a small input
-/// buffer (~4 KB); interleaving two jobs corrupts both. Serialising also gives a natural place to
-/// apply the retry policy for flaky Wi-Fi printers.
+/// Epson-compatible ESC/POS printing service: builds the byte stream, walks the transport
+/// candidates, sends the job and reports a result the UI can display without throwing.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Jobs are serialised on a single gate. Two cashiers pressing "print" at the same moment would
+/// otherwise interleave bytes on a shared spooler queue and produce one corrupted receipt instead
+/// of two correct ones. The gate is held only for the duration of the IO — never while the document
+/// is being built — so the Dispatcher stays responsive.
+/// </para>
+/// <para>
+/// Printing is deliberately *after* the sale is committed and deliberately non-fatal: if every
+/// printer path fails the job still lands in the file spool and the cashier is told where it is.
+/// </para>
+/// </remarks>
 public sealed class EpsonEscPosPrinterService : IReceiptPrinter, IDisposable
 {
-    private readonly IReceiptTransportFactory _transportFactory;
+    private readonly IReceiptTransportFactory _transports;
     private readonly IAppLog _log;
-    private readonly SemaphoreSlim _jobLock = new(1, 1);
+    private readonly SemaphoreSlim _jobGate = new(1, 1);
+    private bool _disposed;
 
-    public EpsonEscPosPrinterService(IReceiptTransportFactory transportFactory, IAppLog log)
+    public EpsonEscPosPrinterService(IReceiptTransportFactory transports, IAppLog log)
     {
-        _transportFactory = transportFactory;
+        _transports = transports;
         _log = log;
     }
 
-    public Task<PrintResult> PrintSaleReceiptAsync(
-        Invoice invoice, HardwareConfig config, User? cashier, Shift? shift, CancellationToken ct = default)
-    {
-        var logo = config.PrintLogo
-            ? LogoRasterizer.TryRasterize(ResolveLogoPath(), config.PaperWidth == PaperWidth.Mm58 ? 288 : 384)
-            : null;
-
-        var payload = ReceiptDocumentBuilder.BuildSaleReceipt(
-            invoice,
-            config,
-            cashier?.DisplayName,
-            shift?.ShiftNumber,
-            logo?.Data,
-            logo?.WidthBytes ?? 0,
-            logo?.HeightDots ?? 0);
-
-        return SendAsync(
-            payload,
-            config,
-            $"Receipt {invoice.InvoiceNumber}",
-            pulseDrawerAfter: DrawerPolicy.ShouldOpen(invoice, config),
-            allowCopies: true,
-            ct: ct);
-    }
-
-    public Task<PrintResult> PrintZReportAsync(ShiftSummary summary, HardwareConfig config, CancellationToken ct = default)
-    {
-        var payload = ReceiptDocumentBuilder.BuildZReport(summary, config);
-        return SendAsync(payload, config, $"Z-Report {summary.ShiftNumber}",
-            pulseDrawerAfter: false, allowCopies: false, ct: ct);
-    }
-
-    public Task<PrintResult> PrintTestAsync(HardwareConfig config, CancellationToken ct = default)
-    {
-        var payload = ReceiptDocumentBuilder.BuildTestPage(config);
-        return SendAsync(payload, config, "Hardware test",
-            pulseDrawerAfter: false, allowCopies: false, ct: ct);
-    }
-
-    public Task<PrintResult> OpenDrawerAsync(HardwareConfig config, CancellationToken ct = default)
-    {
-        // The payload *is* the pulse: never pulse twice and never repeat it for "copies".
-        var payload = ReceiptDocumentBuilder.BuildDrawerPulse(config);
-        return SendAsync(payload, config, "Drawer pulse",
-            pulseDrawerAfter: false, allowCopies: false, ct: ct);
-    }
-
-    public Task<TransportProbe> ProbeAsync(HardwareConfig config, CancellationToken ct = default)
-    {
-        // Probing must never queue behind a print job, and must never throw into the status bar.
-        return Task.Run(async () =>
-        {
-            try
-            {
-                await using var transport = _transportFactory.Create(config);
-                return await transport.ProbeAsync(ct).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                return TransportProbe.Offline(ex.Message);
-            }
-        }, ct);
-    }
-
-    private async Task<PrintResult> SendAsync(
-        byte[] payload,
+    public async Task<PrintResult> PrintSaleReceiptAsync(
+        Invoice invoice,
         HardwareConfig config,
-        string jobName,
-        bool pulseDrawerAfter,
-        bool allowCopies,
-        CancellationToken ct)
+        User? cashier,
+        Shift? shift,
+        CancellationToken ct = default)
     {
-        if (payload.Length == 0)
-        {
-            return PrintResult.Fail("Nothing to print.");
-        }
+        ArgumentNullException.ThrowIfNull(invoice);
+        ArgumentNullException.ThrowIfNull(config);
 
-        await _jobLock.WaitAsync(ct).ConfigureAwait(false);
-        var stopwatch = Stopwatch.StartNew();
+        byte[] payload;
 
         try
         {
-            var copies = allowCopies ? Math.Clamp(config.ReceiptCopies, 1, 3) : 1;
-
-            for (var copy = 1; copy <= copies; copy++)
-            {
-                // Network printers are the only transport that fails transiently in practice
-                // (Wi-Fi roam, DHCP lease), so a single retry is enough and keeps latency bounded.
-                var attempt = 0;
-                while (true)
-                {
-                    attempt++;
-                    try
-                    {
-                        await using var transport = _transportFactory.Create(config);
-                        await transport.SendAsync(payload, ct).ConfigureAwait(false);
-                        break;
-                    }
-                    catch (Exception ex) when (attempt < 2 && config.ConnectionType == PrinterConnectionType.Network)
-                    {
-                        _log.Warn($"{jobName}: network print attempt {attempt} failed ({ex.Message}); retrying once.");
-                        await Task.Delay(250, ct).ConfigureAwait(false);
-                    }
-                }
-            }
-
-            // Drawer pulse is a separate short job on the same connection so the receipt is never
-            // delayed by a retry of the kick command.
-            if (pulseDrawerAfter && config.OpenDrawerOnSale && config.DrawerConnectionType != DrawerConnectionType.SerialPort)
-            {
-                var drawerPin = config.DrawerConnectionType == DrawerConnectionType.PrinterKickPin5 ? (byte)1 : (byte)0;
-                var pulse = ReceiptDocumentBuilder.BuildDrawerPulse(config);
-                await using var transport = _transportFactory.Create(config);
-                await transport.SendAsync(pulse, ct).ConfigureAwait(false);
-                _log.Info($"Drawer pulse sent (pin {drawerPin}).");
-            }
-
-            stopwatch.Stop();
-            _log.Info($"{jobName} printed via {config.ConnectionType} in {stopwatch.ElapsedMilliseconds} ms ({payload.Length} bytes).");
-
-            return new PrintResult(true, $"{jobName} sent to printer.", payload.Length, stopwatch.Elapsed);
-        }
-        catch (OperationCanceledException)
-        {
-            return PrintResult.Fail("Printing was cancelled.");
+            var openDrawer = ShouldOpenDrawer(invoice, config);
+            payload = ReceiptDocumentBuilder.BuildSaleReceipt(invoice, config, cashier?.DisplayName, shift, openDrawer);
         }
         catch (Exception ex)
         {
-            stopwatch.Stop();
-            _log.Error($"{jobName} failed: {ex.Message}", ex);
-            return PrintResult.Fail(ex.Message);
+            _log.Error("Could not render the receipt.", ex);
+            return PrintResult.Failed("The receipt could not be rendered.");
         }
-        finally
-        {
-            _jobLock.Release();
-        }
+
+        var copies = Math.Clamp(config.ReceiptCopies, 1, 3);
+        return await SendAsync(payload, config, copies, $"receipt {invoice.InvoiceNumber}", ct).ConfigureAwait(false);
     }
 
-    private static string? ResolveLogoPath()
+    public async Task<PrintResult> PrintZReportAsync(ShiftSummary summary, HardwareConfig config, CancellationToken ct = default)
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "Assets", "kacher.png");
-        return File.Exists(path) ? path : null;
+        ArgumentNullException.ThrowIfNull(summary);
+        ArgumentNullException.ThrowIfNull(config);
+
+        byte[] payload;
+
+        try
+        {
+            payload = ReceiptDocumentBuilder.BuildZReport(summary, config);
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Could not render the Z-report.", ex);
+            return PrintResult.Failed("The Z-report could not be rendered.");
+        }
+
+        return await SendAsync(payload, config, 1, $"Z-report {summary.ShiftNumber}", ct).ConfigureAwait(false);
     }
 
-    public void Dispose() => _jobLock.Dispose();
-}
+    public async Task<PrintResult> PrintTestAsync(HardwareConfig config, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(config);
 
-/// <summary>
-/// When the sale should kick the drawer:
-///   cash sale            → always (configurable)
-///   card / split sale    → only when configured, since there is no cash to deposit
-///   manual button        → always
-/// </summary>
-public static class DrawerPolicy
-{
-    public static bool ShouldOpen(Invoice invoice, HardwareConfig config)
+        var payload = ReceiptDocumentBuilder.BuildTestPage(config, DateTime.Now);
+        return await SendAsync(payload, config, 1, "test page", ct).ConfigureAwait(false);
+    }
+
+    public async Task<PrintResult> OpenDrawerAsync(HardwareConfig config, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+
+        if (config.DrawerConnectionType == DrawerConnectionType.SerialPort)
+        {
+            // A drawer wired to its own COM port is not driven by the printer's kick line.
+            _log.Warn("Drawer is wired to a standalone COM port; the printer kick cannot open it.");
+            return PrintResult.Failed("This drawer is wired to a COM port, not the printer's kick pin.");
+        }
+
+        var pulse = DrawerCommandParser.ParseOrDefault(config.OpenDrawerCommand);
+
+        // A bare kick is its own job: appending it to a receipt would fire the solenoid twice when
+        // the sale policy already added one.
+        return await SendAsync(pulse.ToBytes(), config, 1, "drawer kick", ct).ConfigureAwait(false);
+    }
+
+    public async Task<ProbeResult> ProbeAsync(HardwareConfig config, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+
+        IReadOnlyList<IReceiptTransport> candidates;
+
+        try
+        {
+            candidates = _transports.CreateFallbacks(config);
+        }
+        catch (TransportException ex)
+        {
+            return new ProbeResult(false, ex.Message);
+        }
+
+        string lastError = "No transport configured.";
+
+        foreach (var transport in candidates)
+        {
+            try
+            {
+                var probe = await transport.ProbeAsync(ct).ConfigureAwait(false);
+
+                if (probe.Reachable)
+                {
+                    return new ProbeResult(true, probe.Detail);
+                }
+
+                lastError = probe.Detail;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                lastError = ex.Message;
+            }
+        }
+
+        return new ProbeResult(false, lastError);
+    }
+
+    // ── Job orchestration ────────────────────────────────────────────────────────────────────
+
+    /// <summary>Drawer policy: sale-level kick, optionally restricted to cash-bearing payments.</summary>
+    private static bool ShouldOpenDrawer(Invoice invoice, HardwareConfig config)
     {
         if (!config.OpenDrawerOnSale)
         {
@@ -217,40 +200,104 @@ public static class DrawerPolicy
             return true;
         }
 
-        return invoice.Payments.Any(p => p.Method is PaymentMethod.Cash or PaymentMethod.Split)
-               || invoice.PaymentMethod is PaymentMethod.Cash or PaymentMethod.Split;
+        // Split payments always involve cash in practice; a card-only sale must not open the till.
+        return invoice.PaymentMethod is PaymentMethod.Cash or PaymentMethod.Split
+               || invoice.Payments.Any(p => p.Method == PaymentMethod.Cash);
     }
-}
 
-/// <summary>PDF / file fallback when no printer is configured, and the export target for reports.</summary>
-public interface IReceiptArchive
-{
-    Task<string> SaveReceiptTextAsync(Invoice invoice, HardwareConfig config, CancellationToken ct = default);
-}
-
-public sealed class ReceiptArchive : IReceiptArchive
-{
-    public async Task<string> SaveReceiptTextAsync(Invoice invoice, HardwareConfig config, CancellationToken ct = default)
+    private async Task<PrintResult> SendAsync(
+        byte[] payload,
+        HardwareConfig config,
+        int copies,
+        string description,
+        CancellationToken ct)
     {
-        var path = Path.Combine(DatabaseConnectionFactory.ReportsDirectory, $"{invoice.InvoiceNumber}.txt");
-        var lines = new List<string>
+        if (_disposed)
         {
-            config.StoreName,
-            config.StoreAddress ?? string.Empty,
-            new string('=', config.ReceiptColumns),
-            $"Invoice : {invoice.InvoiceNumber}",
-            $"Date    : {invoice.CreatedAtUtc:dd/MM/yyyy HH:mm}",
-            new string('-', config.ReceiptColumns)
-        };
+            return PrintResult.Failed("The printing service has been shut down.");
+        }
 
-        lines.AddRange(invoice.Items.Select(i =>
-            $"{i.ProductName,-24} {i.Quantity,4:0.##} x {i.UnitPrice,7:0.00} {i.TotalPrice,8:0.00}"));
+        var job = copies <= 1 ? payload : Repeat(payload, copies);
+        var stopwatch = Stopwatch.StartNew();
 
-        lines.Add(new string('-', config.ReceiptColumns));
-        lines.Add($"Subtotal {invoice.Subtotal:0.00}   Tax {invoice.TaxAmount:0.00}   TOTAL {invoice.TotalAmount:0.00}");
-        lines.Add(config.ReceiptFooter ?? string.Empty);
+        await _jobGate.WaitAsync(ct).ConfigureAwait(false);
 
-        await File.WriteAllLinesAsync(path, lines, ct).ConfigureAwait(false);
-        return path;
+        try
+        {
+            IReadOnlyList<IReceiptTransport> candidates;
+
+            try
+            {
+                candidates = _transports.CreateFallbacks(config);
+            }
+            catch (TransportException ex)
+            {
+                // Misconfiguration, not a hardware fault: still capture the document.
+                _log.Warn($"Printer profile is incomplete: {ex.Message}");
+                candidates = [new FileSpoolTransport(_log)];
+            }
+
+            for (var index = 0; index < candidates.Count; index++)
+            {
+                var transport = candidates[index];
+
+                try
+                {
+                    await transport.SendAsync(job, ct).ConfigureAwait(false);
+                    stopwatch.Stop();
+
+                    _log.Info($"Printed {description} ({job.Length} bytes) via {transport.Description}.");
+
+                    var message = index == 0
+                        ? $"Sent to {transport.Description}."
+                        : $"Primary printer unavailable — printed via {transport.Description}.";
+
+                    return new PrintResult(true, message, job.Length, stopwatch.Elapsed);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _log.Warn($"Transport failed for {description} ({transport.Description}): {ex.Message}");
+                }
+            }
+
+            stopwatch.Stop();
+            return new PrintResult(false, "No printer responded — the job was not delivered.", 0, stopwatch.Elapsed);
+        }
+        catch (OperationCanceledException)
+        {
+            _log.Warn($"Print job cancelled: {description}.");
+            return PrintResult.Failed("Printing was cancelled.");
+        }
+        finally
+        {
+            _jobGate.Release();
+        }
+    }
+
+    private static byte[] Repeat(byte[] payload, int copies)
+    {
+        var buffer = new byte[payload.Length * copies];
+
+        for (var i = 0; i < copies; i++)
+        {
+            Buffer.BlockCopy(payload, 0, buffer, i * payload.Length, payload.Length);
+        }
+
+        return buffer;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _jobGate.Dispose();
     }
 }

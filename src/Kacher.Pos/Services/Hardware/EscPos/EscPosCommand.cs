@@ -1,123 +1,144 @@
 namespace Kacher.Pos.Services.Hardware.EscPos;
 
 /// <summary>
-/// Raw ESC/POS command vocabulary (Epson TM series reference).
-///
-/// ESC/POS is a byte protocol, not a driver API. Every command starts with one of four prefixes:
-///   ESC = 0x1B, GS = 0x1D, FS = 0x1C, DLE = 0x10
-/// followed by a mnemonic byte and 0..n parameter bytes. Because it is stateless at the transport
-/// level, sending the bytes straight to the device avoids the Windows spooler entirely — that is
-/// the whole point of this service: a receipt prints in ~180 ms instead of ~1.2 s through GDI.
-///
-/// Parameter ranges below are validated in <see cref="EscPosBuilder"/> so a bad setting can never
-/// brick a printer mid-service.
+/// Raw ESC/POS command bytes. Every receipt the terminal prints is just a byte stream made of
+/// these sequences followed by text encoded in the printer's active code page.
 /// </summary>
+/// <remarks>
+/// ESC/POS is the de-facto standard command set for Epson and Epson-compatible thermal printers
+/// (TM-T20/T82, Xprinter XP-80C, Rongta RP80, Bixolon SRP-350 …). A `0x1B` byte introduces most
+/// commands, `0x1D` introduces "group 2" commands (barcodes, QR, raster images).
+/// </remarks>
 public static class EscPosCommand
 {
-    // ── Initialisation / control ──────────────────────────────────────────────────────────────
     public const byte Esc = 0x1B;
     public const byte Gs = 0x1D;
-    public const byte Fs = 0x1C;
     public const byte Lf = 0x0A;
     public const byte Cr = 0x0D;
     public const byte Ht = 0x09;
+    public const byte Ff = 0x0C;
 
-    /// <summary>ESC @ — reset to power-on state. Always send once per job.</summary>
-    public static readonly byte[] Initialize = { Esc, 0x40 };
+    // ── Initialise / reset ─────────────────────────────────────────────────────────────────────
+    /// <summary>ESC @ — reset printer to power-on defaults (font, alignment, line spacing).</summary>
+    public static ReadOnlySpan<byte> Initialise => [Esc, 0x40];
 
-    /// <summary>DLE EOT n — real-time status request (1 = printer, 2 = offline cause, 3 = error, 4 = paper).</summary>
-    public static byte[] RealTimeStatus(byte n) => new byte[] { 0x10, 0x04, n };
+    /// <summary>DLE EOT n — real-time status request (n=1 printer status, n=2 offline, n=4 paper).</summary>
+    public static byte[] StatusRequest(byte type = 1) => [0x10, 0x04, type];
 
     // ── Text formatting ───────────────────────────────────────────────────────────────────────
-    /// <summary>ESC a n — 0 left, 1 centre, 2 right.</summary>
-    public static byte[] Align(byte n) => new byte[] { Esc, 0x61, n };
+    /// <summary>ESC a n — align: 0 left, 1 centre, 2 right.</summary>
+    public static byte[] Align(byte mode) => [Esc, 0x61, mode];
 
     /// <summary>ESC E n — emphasised (bold) on/off.</summary>
-    public static byte[] Bold(bool on) => new byte[] { Esc, 0x45, (byte)(on ? 1 : 0) };
+    public static byte[] Bold(bool on) => [Esc, 0x45, (byte)(on ? 1 : 0)];
 
-    /// <summary>ESC - n — underline 0/1/2.</summary>
-    public static byte[] Underline(byte n) => new byte[] { Esc, 0x2D, n };
+    /// <summary>ESC - n — underline: 0 off, 1 thin, 2 thick.</summary>
+    public static byte[] Underline(byte mode) => [Esc, 0x2D, mode];
 
-    /// <summary>GS B n — white/black reverse printing, the classic "total" highlight bar.</summary>
-    public static byte[] Reverse(bool on) => new byte[] { Gs, 0x42, (byte)(on ? 1 : 0) };
-
-    /// <summary>GS ! n — character size. High nibble = width-1, low nibble = height-1 (0x11 = double both).</summary>
-    public static byte[] Size(byte n) => new byte[] { Gs, 0x21, n };
-
-    /// <summary>ESC t n — select code page (16 = WPC1252, 0 = CP437, 22 = CP864, 25 = WPC1256).</summary>
-    public static byte[] CodePage(byte n) => new byte[] { Esc, 0x74, n };
-
-    /// <summary>ESC 3 n — line spacing in dots (default 30 for 80 mm).</summary>
-    public static byte[] LineSpacing(byte n) => new byte[] { Esc, 0x33, n };
-
-    // ── Paper movement ───────────────────────────────────────────────────────────────────────
-    /// <summary>ESC d n — print and feed n lines.</summary>
-    public static byte[] FeedLines(byte n) => new byte[] { Esc, 0x64, n };
-
-    /// <summary>ESC J n — print and feed n dots (fine-grained spacing used before the cutter).</summary>
-    public static byte[] FeedDots(byte n) => new byte[] { Esc, 0x4A, n };
-
-    /// <summary>GS V m n — cut. 66 = partial cut with feed, 65 = partial, 0 = full.</summary>
-    public static byte[] Cut(bool partialWithFeed = true) =>
-        new byte[] { Gs, 0x56, (byte)(partialWithFeed ? 66 : 65), 0x00 };
-
-    /// <summary>ESC i — legacy full cut supported by older TM printers.</summary>
-    public static readonly byte[] LegacyCut = { Esc, 0x69 };
-
-    // ── Cash drawer ──────────────────────────────────────────────────────────────────────────
     /// <summary>
-    /// ESC p m t1 t2 — drawer kick.
-    ///   m  = connector pin: 0 → pin 2, 1 → pin 5
-    ///   t1 = ON time  × 2 ms   (25 → 50 ms)
-    ///   t2 = OFF time × 2 ms   (250 → 500 ms)
-    /// Epson recommends 50 ms on / 500 ms off; shorter pulses leave the solenoid latched and burn
-    /// the coil, longer pulses can bounce the drawer open twice.
+    /// GS ! n — character size. The high nibble is the width multiplier and the low nibble the
+    /// height multiplier, each 1..8 (encoded as 0..7).
     /// </summary>
-    public static byte[] DrawerKick(byte pin = 0, byte onTime = 25, byte offTime = 250) =>
-        new byte[] { Esc, 0x70, pin, onTime, offTime };
+    public static byte[] TextSize(int width, int height)
+    {
+        var w = (byte)(Math.Clamp(width, 1, 8) - 1);
+        var h = (byte)(Math.Clamp(height, 1, 8) - 1);
+        return [Gs, 0x21, (byte)((w << 4) | h)];
+    }
 
-    // ── Barcode ──────────────────────────────────────────────────────────────────────────────
-    /// <summary>GS h n — barcode height in dots (1..255).</summary>
-    public static byte[] BarcodeHeight(byte n) => new byte[] { Gs, 0x68, n };
+    /// <summary>ESC M n — Font A (0, 12×24) or Font B (1, 9×17, narrower → more columns).</summary>
+    public static byte[] Font(byte font) => [Esc, 0x4D, font];
 
-    /// <summary>GS w n — module width (2..6).</summary>
-    public static byte[] BarcodeWidth(byte n) => new byte[] { Gs, 0x77, n };
+    /// <summary>ESC t n — select the character code table (code page).</summary>
+    public static byte[] CodePage(byte codePage) => [Esc, 0x74, codePage];
 
-    /// <summary>GS H n — HRI (human readable) position: 0 none, 1 above, 2 below, 3 both.</summary>
-    public static byte[] BarcodeHri(byte n) => new byte[] { Gs, 0x48, n };
+    /// <summary>ESC 3 n — line spacing in dots (24 is the default for Font A).</summary>
+    public static byte[] LineSpacing(byte dots) => [Esc, 0x33, dots];
 
-    /// <summary>GS f n — HRI font: 0 = Font A, 1 = Font B.</summary>
-    public static byte[] BarcodeFont(byte n) => new byte[] { Gs, 0x66, n };
+    // ── Paper ─────────────────────────────────────────────────────────────────────────────────
+    /// <summary>ESC d n — feed n lines.</summary>
+    public static byte[] Feed(byte lines) => [Esc, 0x64, lines];
 
-    /// <summary>Barcode symbology identifiers used by <c>GS k</c>.</summary>
-    public const byte SymbologyUpcA = 65;
-    public const byte SymbologyUpcE = 66;
-    public const byte SymbologyEan13 = 67;
-    public const byte SymbologyEan8 = 68;
-    public const byte SymbologyCode39 = 69;
-    public const byte SymbologyItf = 70;
-    public const byte SymbologyCode128 = 73;
+    /// <summary>GS V m n — cut. m=0 full cut, m=1 partial cut; n is the feed-before-cut distance.</summary>
+    public static byte[] Cut(bool partial = false, byte feed = 3) => [Gs, 0x56, (byte)(partial ? 1 : 0), feed];
 
-    // ── QR code (2D symbol store) ────────────────────────────────────────────────────────────
-    /// <summary>GS ( k — 2D symbol command family. Parameters are wrapped as (pL, pH) length prefix.</summary>
-    public static readonly byte[] QrFunction = { Gs, 0x28, 0x6B };
+    // ── Cash drawer ───────────────────────────────────────────────────────────────────────────
+    /// <summary>
+    /// ESC p m t1 t2 — pulse the drawer kick connector.
+    /// <para>m=0 → pin 2 (the standard drawer), m=1 → pin 5.</para>
+    /// <para>t1/t2 are the on/off pulse widths in 2 ms units; 25 and 250 → 50 ms on / 500 ms off,
+    /// which is the Epson recommended drive for a 24 V solenoid.</para>
+    /// </summary>
+    public static byte[] OpenDrawer(byte pin = 0, byte onTime = 25, byte offTime = 250)
+        => [Esc, 0x70, pin, onTime, offTime];
 
-    /// <summary>Select model 2 (the modern, widely supported QR model).</summary>
-    public static readonly byte[] QrSelectModel2 = { Gs, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00 };
+    // ── Barcodes ──────────────────────────────────────────────────────────────────────────────
+    /// <summary>
+    /// GS H n / GS f n / GS h n / GS w n / GS k — CODE 128 (m=73) with HRI text below the bars.
+    /// </summary>
+    public static byte[] Code128(string data, byte moduleWidth = 2, byte height = 80)
+    {
+        // GS k takes a single length byte, so cap the payload at 255 characters.
+        var ascii = System.Text.Encoding.ASCII.GetBytes(data);
+        var payload = ascii.Length > 255 ? ascii[..255] : ascii;
 
-    /// <summary>Module size in dots; 1..16. 6 is the sweet spot on 80 mm receipts.</summary>
-    public static byte[] QrModuleSize(byte n) => new byte[] { Gs, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, n };
+        return
+        [
+            Gs, 0x48, 0x02,      // HRI below the barcode
+            Gs, 0x66, 0x00,      // HRI in Font A
+            Gs, 0x68, height,    // bar height in dots
+            Gs, 0x77, moduleWidth,
+            Gs, 0x6B, 73, (byte)payload.Length, .. payload
+        ];
+    }
 
-    /// <summary>Error correction level: 48=L(~7%), 49=M(~15%), 50=Q(~25%), 51=H(~30%).</summary>
-    public static byte[] QrErrorCorrection(byte level) => new byte[] { Gs, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, level };
+    // ── QR code ──────────────────────────────────────────────────────────────────────────────
+    // GS ( k has a 4-byte parameter block: pL pH cn fn [params]; pL/pH are the little-endian
+    // length of "cn fn params" only, so every helper below recomputes them.
+
+    /// <summary>GS ( k — select QR model 2, set module size and error correction.</summary>
+    public static byte[] QrConfigure(byte moduleSize = 6, byte errorCorrection = 49)
+    {
+        // Error correction: 48=L 7%, 49=M 15%, 50=Q 25%, 51=H 30%.
+        var m = Math.Clamp(moduleSize, 1, 16);
+        return
+        [
+            Gs, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00, // model 2
+            Gs, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, m,          // module size
+            Gs, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, errorCorrection
+        ];
+    }
+
+    /// <summary>GS ( k — store <paramref name="data"/> in the symbol buffer (fn 080).</summary>
+    public static byte[] QrStore(string data)
+    {
+        var payload = System.Text.Encoding.UTF8.GetBytes(data);
+        var length = payload.Length + 3;
+
+        return
+        [
+            Gs, 0x28, 0x6B, (byte)(length & 0xFF), (byte)((length >> 8) & 0xFF),
+            0x31, 0x50, 0x30, .. payload
+        ];
+    }
+
+    /// <summary>GS ( k — print the stored symbol (fn 081).</summary>
+    public static ReadOnlySpan<byte> QrPrint => [Gs, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30];
 
     // ── Raster graphics ──────────────────────────────────────────────────────────────────────
-    /// <summary>GS v 0 m xL xH yL yH — raster bit image. m=0 normal, 48/49 double width/height.</summary>
-    public static byte[] RasterHeader(int widthBytes, int heightDots, byte mode = 0) =>
-        new byte[]
-        {
-            Gs, 0x76, 0x30, mode,
-            (byte)(widthBytes & 0xFF), (byte)((widthBytes >> 8) & 0xFF),
-            (byte)(heightDots & 0xFF), (byte)((heightDots >> 8) & 0xFF)
-        };
+    /// <summary>
+    /// GS v 0 m xL xH yL yH — print a raster bitmap supplied as 1-bit, row-major data.
+    /// </summary>
+    public static byte[] RasterImage(int widthDots, int heightDots, byte[] bitmap)
+    {
+        var bytesPerRow = (widthDots + 7) / 8;
+
+        return
+        [
+            Gs, 0x76, 0x30, 0x00,
+            (byte)(bytesPerRow & 0xFF), (byte)((bytesPerRow >> 8) & 0xFF),
+            (byte)(heightDots & 0xFF), (byte)((heightDots >> 8) & 0xFF),
+            .. bitmap
+        ];
+    }
 }

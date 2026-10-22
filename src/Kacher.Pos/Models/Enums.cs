@@ -31,7 +31,7 @@ public enum PrinterConnectionType
 {
     /// <summary>Windows spooler queue (works with virtually every installed driver).</summary>
     WindowsDriver = 0,
-    /// <summary>Raw USB endpoint — fastest path, bypasses the spooler entirely.</summary>
+    /// <summary>USB-attached printer addressed through its spooler queue in RAW mode.</summary>
     Usb = 1,
     /// <summary>TCP 9100 "JetDirect" raw socket.</summary>
     Network = 2,

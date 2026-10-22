@@ -1,99 +1,94 @@
 using System.IO.Ports;
+using Kacher.Pos.Infrastructure;
 
 namespace Kacher.Pos.Services.Hardware.Transports;
 
 /// <summary>
-/// RS-232 / USB-serial printer transport. Kept for legacy TM-T88 units and for kiosk builds where
-/// the printer is daisy-chained with the barcode scanner.
-///
-/// <see cref="SerialPort"/> has no true async surface on Windows, so the (blocking) base-stream
-/// write is wrapped in <see cref="Task.Run(Func{Task})"/>. That keeps the UI thread free — the
-/// requirement — while acknowledging that the I/O itself is a kernel call on a thread-pool thread.
+/// Drives a serial (RS-232) thermal printer on a COM port.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Serial printers are still common on legacy tills and in kiosks. ESC/POS over RS-232 is
+/// byte-for-byte identical to the network path; only framing differs — 8 data bits, no parity,
+/// one stop bit and an optional RTS/CTS handshake.
+/// </para>
+/// <para>
+/// <c>SerialPort</c> has no true async API, so the blocking write runs on the thread pool. The port
+/// is opened and closed per job: leaving it open would block other applications (and the barcode
+/// scanner often shares the same USB-serial chipset family).
+/// </para>
+/// </remarks>
 public sealed class SerialEscPosTransport : IReceiptTransport
 {
     private readonly string _portName;
     private readonly int _baudRate;
-    private SerialPort? _port;
+    private readonly IAppLog _log;
 
-    public SerialEscPosTransport(string portName, int baudRate = 9600)
+    public SerialEscPosTransport(string portName, int baudRate, IAppLog log)
     {
         _portName = portName;
         _baudRate = baudRate <= 0 ? 9600 : baudRate;
+        _log = log;
     }
 
-    public string Description => $"Serial {_portName} @ {_baudRate}";
+    public string Description => $"Serial ESC/POS → {_portName} @ {_baudRate} baud";
 
-    public bool IsConnected => _port?.IsOpen == true;
-
-    private SerialPort EnsureOpen()
-    {
-        if (_port is { IsOpen: true })
-        {
-            return _port;
-        }
-
-        var port = new SerialPort(_portName, _baudRate, Parity.None, 8, StopBits.One)
-        {
-            Handshake = Handshake.None,
-            DtrEnable = true,
-            RtsEnable = true,
-            WriteTimeout = 5000,
-            ReadTimeout = 1500
-        };
-
-        port.Open();
-        _port = port;
-        return port;
-    }
-
-    public async Task SendAsync(ReadOnlyMemory<byte> payload, CancellationToken ct = default)
-    {
-        var port = EnsureOpen();
-        var buffer = payload.ToArray();
-
-        await Task.Run(async () =>
-        {
-            var stream = port.BaseStream;
-            await stream.WriteAsync(buffer, ct).ConfigureAwait(false);
-            await stream.FlushAsync(ct).ConfigureAwait(false);
-        }, ct).ConfigureAwait(false);
-    }
+    public Task SendAsync(byte[] payload, CancellationToken ct = default)
+        => Task.Run(() => SendBlocking(payload, ct), CancellationToken.None);
 
     public Task<TransportProbe> ProbeAsync(CancellationToken ct = default)
     {
-        try
+        return Task.Run(() =>
         {
-            var port = EnsureOpen();
-
-            // DSR/DCD high generally means the printer is powered and ready on RS-232.
-            var ready = port.DsrHolding || port.CDHolding;
-            return Task.FromResult(ready
-                ? TransportProbe.Online($"{_portName} ready", TimeSpan.Zero)
-                : TransportProbe.Online($"{_portName} open (no DSR)", TimeSpan.Zero));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
-        {
-            return Task.FromResult(TransportProbe.Offline(ex.Message));
-        }
+            try
+            {
+                using var port = CreatePort();
+                port.Open();
+                port.Close();
+                return TransportProbe.Ok($"{_portName} is available.");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                return TransportProbe.Fail($"Cannot open {_portName}: {ex.Message}");
+            }
+        }, ct);
     }
 
-    public ValueTask DisposeAsync()
+    private void SendBlocking(byte[] payload, CancellationToken ct)
     {
         try
         {
-            if (_port is { IsOpen: true })
+            using var port = CreatePort();
+            port.Open();
+
+            // Write in blocks: some USB-serial bridges drop bytes on a single huge transfer.
+            const int chunkSize = 512;
+            for (var offset = 0; offset < payload.Length; offset += chunkSize)
             {
-                _port.Close();
+                ct.ThrowIfCancellationRequested();
+
+                var count = Math.Min(chunkSize, payload.Length - offset);
+                port.Write(payload, offset, count);
             }
+
+            // The printer needs the last byte clocked out before the port is torn down.
+            port.BaseStream.Flush();
+            Thread.Sleep(120);
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            // port already gone
+            throw new TransportException($"Serial write to {_portName} failed: {ex.Message}", ex);
         }
 
-        _port?.Dispose();
-        _port = null;
-        return ValueTask.CompletedTask;
+        _log.Debug($"Serial job of {payload.Length} bytes sent to {_portName}.");
     }
+
+    private SerialPort CreatePort() => new(_portName, _baudRate, Parity.None, 8, StopBits.One)
+    {
+        Handshake = Handshake.None,
+        DtrEnable = true,
+        RtsEnable = true,
+        WriteTimeout = 10_000,
+        ReadTimeout = 2_000
+    };
 }

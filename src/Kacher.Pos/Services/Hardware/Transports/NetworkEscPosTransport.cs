@@ -1,111 +1,91 @@
-using System.Diagnostics;
 using System.Net.Sockets;
+using Kacher.Pos.Infrastructure;
 
 namespace Kacher.Pos.Services.Hardware.Transports;
 
 /// <summary>
-/// Raw TCP transport for Ethernet/Wi-Fi thermal printers. ESC/POS over TCP uses port 9100
-/// ("JetDirect"/"raw printing") — no handshake, no framing, the printer consumes the socket bytes
-/// as a command stream and closes the connection when the job is done.
-///
-/// Implementation notes:
-/// * <c>NoDelay = true</c> disables Nagle so a 2 KB receipt leaves in one segment.
-/// * A connect timeout is enforced with a linked CTS — <c>TcpClient.ConnectAsync</c> alone can hang
-///   for the Windows default SYN timeout (~21 s), which would freeze the "Process &amp; Print" button.
-/// * The transport is created per print job and disposed immediately: printers accept one raw
-///   connection at a time, so holding a socket open blocks the second till.
+/// Sends jobs to a network-attached printer over a raw TCP socket (the "port 9100" / JetDirect
+/// protocol that every Ethernet thermal printer speaks).
 /// </summary>
+/// <remarks>
+/// <para>
+/// No driver and no spooler sit in the path, so latency is one round trip on the LAN and the
+/// printer starts printing before the last byte arrives. That is what makes a busy till feel
+/// instant compared with a 300–800 ms GDI spool cycle.
+/// </para>
+/// <para>
+/// The job is written, the socket is shut down for sending (FIN) and then closed. Printer firmware
+/// treats the FIN as "end of job", which is why no explicit length prefix is needed.
+/// </para>
+/// </remarks>
 public sealed class NetworkEscPosTransport : IReceiptTransport
 {
     private readonly string _host;
     private readonly int _port;
-    private TcpClient? _client;
-    private NetworkStream? _stream;
+    private readonly IAppLog _log;
+    private readonly TimeSpan _connectTimeout;
 
-    public NetworkEscPosTransport(string host, int port = 9100)
+    public NetworkEscPosTransport(string host, int port, IAppLog log, TimeSpan? connectTimeout = null)
     {
         _host = host;
         _port = port <= 0 ? 9100 : port;
+        _log = log;
+        _connectTimeout = connectTimeout ?? TimeSpan.FromSeconds(4);
     }
 
-    public string Description => $"Network {_host}:{_port}";
+    public string Description => $"Network ESC/POS → {_host}:{_port}";
 
-    public bool IsConnected => _client?.Connected == true;
-
-    private async Task EnsureConnectedAsync(TimeSpan timeout, CancellationToken ct)
+    public async Task SendAsync(byte[] payload, CancellationToken ct = default)
     {
-        if (_client?.Connected == true && _stream is not null)
-        {
-            return;
-        }
-
-        DisposeClient();
-
-        var client = new TcpClient
-        {
-            NoDelay = true,
-            SendTimeout = (int)timeout.TotalMilliseconds
-        };
-
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        linked.CancelAfter(timeout);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(_connectTimeout);
 
         try
         {
-            await client.ConnectAsync(_host, _port, linked.Token).ConfigureAwait(false);
+            using var client = new TcpClient { NoDelay = true };
+
+            await client.ConnectAsync(_host, _port, timeout.Token).ConfigureAwait(false);
+
+            // Once connected the printer may be busy rendering the previous job; give the write a
+            // longer budget than the connect attempt itself.
+            timeout.CancelAfter(TimeSpan.FromSeconds(15));
+
+            await using var stream = client.GetStream();
+            await stream.WriteAsync(payload, timeout.Token).ConfigureAwait(false);
+            await stream.FlushAsync(timeout.Token).ConfigureAwait(false);
+
+            client.Client.Shutdown(SocketShutdown.Send);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            client.Dispose();
-            throw new TimeoutException($"Printer at {_host}:{_port} did not accept a connection within {timeout.TotalSeconds:0.#} s.");
+            throw new TransportException($"Printer at {_host}:{_port} did not respond in time.");
         }
         catch (SocketException ex)
         {
-            client.Dispose();
-            throw new IOException($"Cannot reach printer at {_host}:{_port} ({ex.SocketErrorCode}).", ex);
+            throw new TransportException($"Network error talking to {_host}:{_port} — {ex.Message}", ex);
         }
 
-        _client = client;
-        _stream = client.GetStream();
-    }
-
-    public async Task SendAsync(ReadOnlyMemory<byte> payload, CancellationToken ct = default)
-    {
-        await EnsureConnectedAsync(TimeSpan.FromSeconds(3), ct).ConfigureAwait(false);
-
-        // A single WriteAsync keeps the payload in one TCP segment; the printer buffers it all
-        // before executing, which avoids the half-printed-receipt failure mode on flaky Wi-Fi.
-        await _stream!.WriteAsync(payload, ct).ConfigureAwait(false);
-        await _stream.FlushAsync(ct).ConfigureAwait(false);
+        _log.Debug($"Sent {payload.Length} bytes to {_host}:{_port}.");
     }
 
     public async Task<TransportProbe> ProbeAsync(CancellationToken ct = default)
     {
-        var sw = Stopwatch.StartNew();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(2));
+
         try
         {
-            await EnsureConnectedAsync(TimeSpan.FromSeconds(1.5), ct).ConfigureAwait(false);
-            sw.Stop();
-            return TransportProbe.Online($"Reachable ({sw.ElapsedMilliseconds} ms)", sw.Elapsed);
+            using var client = new TcpClient();
+            await client.ConnectAsync(_host, _port, timeout.Token).ConfigureAwait(false);
+            return TransportProbe.Ok($"Connected to {_host}:{_port}.");
         }
-        catch (Exception ex) when (ex is IOException or TimeoutException or SocketException)
+        catch (OperationCanceledException)
         {
-            sw.Stop();
-            return TransportProbe.Offline(ex.Message);
+            return TransportProbe.Fail($"No response from {_host}:{_port} within 2 s.");
         }
-    }
-
-    private void DisposeClient()
-    {
-        _stream?.Dispose();
-        _stream = null;
-        _client?.Dispose();
-        _client = null;
-    }
-
-    public ValueTask DisposeAsync()
-    {
-        DisposeClient();
-        return ValueTask.CompletedTask;
+        catch (SocketException ex)
+        {
+            return TransportProbe.Fail($"{_host}:{_port} refused the connection — {ex.SocketErrorCode}.");
+        }
     }
 }
