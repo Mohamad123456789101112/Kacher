@@ -45,6 +45,32 @@ dotnet build Kacher.sln -c Debug
 dotnet run --project src\Kacher.Pos\Kacher.Pos.csproj
 ```
 
+### Build the Windows application (`.exe`)
+
+WPF is a Windows-only target: the XAML markup compiler and the Windows Desktop targeting pack do not
+exist for Linux or macOS, so the application has to be produced on Windows. Two supported routes:
+
+**A. One command, on any Windows machine with the .NET 8 SDK**
+
+```powershell
+.\build-exe.ps1            # self-contained folder → dist\KacherPos\Kacher.Pos.exe
+.\build-exe.ps1 -Zip       # same, plus dist\KacherPos-win-x64.zip
+```
+
+Self-contained means the till needs **nothing installed** — no .NET runtime, no SDK. Copy the folder,
+run `Kacher.Pos.exe`, done. Add `-FrameworkDependent` for a much smaller folder if the .NET 8 Desktop
+Runtime is already on the machine.
+
+**B. Let GitHub build it**
+
+Push a tag (`git tag v1.0.0 && git push --tags`) or run the **build** workflow manually
+(*Actions → build → Run workflow*). It compiles the solution, publishes the self-contained app and
+attaches `kacher-pos-win-x64` to the run (and to the release, for tags) — download, unzip, run.
+
+The exe is unsigned, so Windows SmartScreen shows "Unknown publisher" on first launch: *More info →
+Run anyway*. Sign it for production with an Authenticode certificate
+(`signtool sign /fd SHA256 /a Kacher.Pos.exe`).
+
 ### Demo operators
 
 Seeded on first launch (change them in **Settings → Operators** before going live):
