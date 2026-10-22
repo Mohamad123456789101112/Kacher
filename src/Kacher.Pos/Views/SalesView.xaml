@@ -56,7 +56,7 @@
                         </Button>
                         <Button Style="{StaticResource Kacher.IconButton}" Width="40" Height="40"
                                 Command="{Binding ClearCartCommand}" ToolTip="Clear cart">
-                            <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="13" />
+                            <Path Style="{StaticResource Kacher.IconMuted}" Data="{StaticResource Icon.Trash}" />
                         </Button>
                     </StackPanel>
                 </Grid>
@@ -65,9 +65,9 @@
                 <Border Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center"
                         Visibility="{Binding Cart.Count, Converter={StaticResource CountToVisibility}, ConverterParameter=invert}">
                     <StackPanel>
-                        <TextBlock Text="&#xE7BF;" FontFamily="Segoe MDL2 Assets" FontSize="52"
-                                   HorizontalAlignment="Center"
-                                   Foreground="{DynamicResource Kacher.TextMuted}" Opacity="0.5" />
+                        <Path Width="56" Height="56" Stretch="Uniform" Fill="Transparent" StrokeThickness="1.1"
+                                  Stroke="{DynamicResource Kacher.TextMuted}" Opacity="0.55"
+                                  Data="{StaticResource Icon.Sales}" HorizontalAlignment="Center" />
                         <TextBlock Text="{Binding CartEmptyHint}" Style="{StaticResource Kacher.Subtitle}"
                                    TextAlignment="Center" Margin="0,14,0,0" MaxWidth="280" TextWrapping="Wrap" />
                     </StackPanel>
@@ -165,8 +165,8 @@
                                                 RelativeSource={RelativeSource AncestorType=UserControl}}"
                                             CommandParameter="{Binding}"
                                             ToolTip="Remove line">
-                                        <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="12"
-                                                   Foreground="{DynamicResource Kacher.Danger}" />
+                                        <Path Style="{StaticResource Kacher.IconMuted}" Data="{StaticResource Icon.Trash}"
+                                              Stroke="{DynamicResource Kacher.Danger}" />
                                     </Button>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
@@ -203,9 +203,8 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
 
-                            <TextBlock Grid.Column="0" Text="&#xE8B6;" FontFamily="Segoe MDL2 Assets"
-                                       FontSize="18" VerticalAlignment="Center" Margin="12,0,4,0"
-                                       Foreground="{DynamicResource Kacher.Accent}" />
+                            <Path Grid.Column="0" Style="{StaticResource Kacher.IconAccent}" Width="20" Height="20"
+                                      Data="{StaticResource Icon.Barcode}" VerticalAlignment="Center" Margin="12,0,4,0" />
 
                             <Grid Grid.Column="1">
                                 <TextBox x:Name="ScanBox"
@@ -245,7 +244,7 @@
                             Background="{DynamicResource Kacher.SurfaceRaised}"
                             Command="{Binding RefreshCatalogueCommand}"
                             ToolTip="Reload catalogue">
-                        <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="15" />
+                        <Path Style="{StaticResource Kacher.IconMuted}" Data="{StaticResource Icon.Refresh}" />
                     </Button>
                 </Grid>
 
@@ -274,8 +273,9 @@
                                     </Style.Triggers>
                                 </Style>
                             </Border.Style>
-                            <TextBlock Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="9"
-                                       Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Path Width="10" Height="10" Stretch="Uniform" Fill="Transparent" Stroke="White"
+                                      StrokeThickness="2.4" Data="{StaticResource Icon.Check}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <TextBlock Text="{Binding ScanMessage}" FontSize="13" FontWeight="SemiBold"
                                    VerticalAlignment="Center" />
@@ -333,10 +333,22 @@
                                         </Grid.RowDefinitions>
 
                                         <Border Grid.Row="0" Height="56" CornerRadius="15,15,0,0"
-                                                Background="{Binding ColorHex, Converter={StaticResource HexBrush}}">
+                                                ClipToBounds="True">
+                                            <Border.Background>
+                                                <!-- Diagonal sheen: a flat colour block reads as a placeholder,
+                                                     a two-stop gradient reads as a designed product tile. -->
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                    <GradientStop Color="{Binding ColorHex, Converter={StaticResource HexColor}}"
+                                                                  Offset="0" />
+                                                    <GradientStop Color="#33000000" Offset="1" />
+                                                </LinearGradientBrush>
+                                            </Border.Background>
                                             <Grid>
-                                                <TextBlock Text="{Binding Initial}" FontSize="24" FontWeight="Bold"
-                                                           Foreground="#EEFFFFFF"
+                                                <Image Source="{Binding ImagePath, Converter={StaticResource ImageSource}}"
+                                                       Stretch="UniformToFill"
+                                                       RenderOptions.BitmapScalingMode="HighQuality" />
+                                                <TextBlock Text="{Binding Initial}" FontSize="22" FontWeight="Bold"
+                                                           Foreground="#F2FFFFFF"
                                                            HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                 <Border HorizontalAlignment="Right" VerticalAlignment="Top"
                                                         Background="#CC000000" CornerRadius="999" Padding="6,2" Margin="6"
@@ -434,8 +446,9 @@
                             <Style TargetType="Button" BasedOn="{StaticResource Kacher.PrimaryButton}" />
                         </Button.Style>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE749;" FontFamily="Segoe MDL2 Assets" FontSize="18"
-                                       VerticalAlignment="Center" Margin="0,0,10,0" />
+                            <Path Width="19" Height="19" Stretch="Uniform" Fill="Transparent" Stroke="White"
+                                       StrokeThickness="1.8" StrokeLineJoin="Round"
+                                       Data="{StaticResource Icon.Card}" VerticalAlignment="Center" Margin="0,0,10,0" />
                             <TextBlock Text="Process &amp; Print" FontSize="16" FontWeight="Bold"
                                        VerticalAlignment="Center" />
                         </StackPanel>
@@ -471,7 +484,7 @@
                         <TextBlock Text="Take payment" Style="{StaticResource Kacher.Display}" />
                         <Button HorizontalAlignment="Right" Style="{StaticResource Kacher.IconButton}"
                                 Command="{Binding CloseCheckoutCommand}" ToolTip="Back to cart">
-                            <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="13" />
+                            <Path Style="{StaticResource Kacher.IconMuted}" Data="{StaticResource Icon.Close}" />
                         </Button>
                     </Grid>
 
@@ -626,7 +639,7 @@
                             <Button Grid.Row="3" Grid.Column="2" Height="52" Margin="3"
                                     Style="{StaticResource Kacher.TouchButton}"
                                     Command="{Binding BackspaceTenderCommand}">
-                                <TextBlock Text="&#xE894;" FontFamily="Segoe MDL2 Assets" FontSize="14" />
+                                <Path Style="{StaticResource Kacher.IconMuted}" Data="{StaticResource Icon.Collapse}" />
                             </Button>
                         </Grid>
                     </Grid>
@@ -639,8 +652,9 @@
                             <Style TargetType="Button" BasedOn="{StaticResource Kacher.PrimaryButton}" />
                         </Button.Style>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE749;" FontFamily="Segoe MDL2 Assets" FontSize="17"
-                                       VerticalAlignment="Center" Margin="0,0,10,0" />
+                            <Path Width="18" Height="18" Stretch="Uniform" Fill="Transparent" Stroke="White"
+                                       StrokeThickness="1.8" StrokeLineJoin="Round"
+                                       Data="{StaticResource Icon.Check}" VerticalAlignment="Center" Margin="0,0,10,0" />
                             <TextBlock Text="Complete &amp; print" FontSize="16" FontWeight="Bold"
                                        VerticalAlignment="Center" />
                         </StackPanel>

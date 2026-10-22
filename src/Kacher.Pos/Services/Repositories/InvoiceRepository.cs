@@ -18,6 +18,12 @@ public interface IInvoiceRepository
 
     Task<IReadOnlyList<InvoiceRow>> GetRecentAsync(int take = 100, DateTime? from = null, CancellationToken ct = default);
 
+    /// <summary>
+    /// Free-text search over invoice number, cashier name and barcode of any line. Empty term returns
+    /// the most recent invoices, which is what the till needs 90 % of the time.
+    /// </summary>
+    Task<IReadOnlyList<InvoiceRow>> SearchAsync(string? term, int take = 150, DateTime? from = null, CancellationToken ct = default);
+
     Task<Invoice> RefundAsync(int invoiceId, int userId, string reason, CancellationToken ct = default);
 
     Task<string> PeekNextNumberAsync(CancellationToken ct = default);
@@ -154,6 +160,50 @@ public sealed class InvoiceRepository : IInvoiceRepository
         return await query
             .OrderByDescending(i => i.CreatedAtUtc)
             .Take(take)
+            .Select(i => new InvoiceRow(
+                i.Id,
+                i.InvoiceNumber,
+                i.CreatedAtUtc,
+                i.TotalAmount,
+                i.PaymentMethod,
+                i.Status,
+                i.Items.Count,
+                i.Cashier != null ? i.Cashier.DisplayName : null))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<InvoiceRow>> SearchAsync(
+        string? term,
+        int take = 150,
+        DateTime? from = null,
+        CancellationToken ct = default)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+
+        var query = db.Invoices.AsNoTracking();
+
+        if (from is { } start)
+        {
+            query = query.Where(i => i.CreatedAtUtc >= start);
+        }
+
+        if (!string.IsNullOrWhiteSpace(term))
+        {
+            // LIKE with a leading wildcard cannot use the unique index, but invoice tables stay small
+            // per terminal (tens of thousands of rows) and EF translates this to a single scan.
+            var pattern = "%" + term.Trim() + "%";
+
+            query = query.Where(i =>
+                EF.Functions.Like(i.InvoiceNumber, pattern)
+                || (i.Cashier != null && EF.Functions.Like(i.Cashier.DisplayName, pattern))
+                || i.Items.Any(line => EF.Functions.Like(line.Barcode, pattern))
+                || i.Items.Any(line => EF.Functions.Like(line.ProductName, pattern)));
+        }
+
+        return await query
+            .OrderByDescending(i => i.CreatedAtUtc)
+            .Take(Math.Clamp(take, 1, 500))
             .Select(i => new InvoiceRow(
                 i.Id,
                 i.InvoiceNumber,

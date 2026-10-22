@@ -54,12 +54,14 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
 
         NavItems = new ObservableCollection<NavItemViewModel>
         {
-            new("Sales", "PointOfSale", "sales", Permissions.ProcessSale),
-            new("Products", "PackageVariantClosed", "products", Permissions.ViewCatalogue),
-            new("Inventory", "Warehouse", "inventory", Permissions.ViewCatalogue),
-            new("Reports", "ChartBoxOutline", "reports", Permissions.ViewReports),
-            new("Shift", "CashRegister", "shift", Permissions.ProcessSale),
-            new("Settings", "CogOutline", "settings", null)
+            new("Dashboard", "Icon.Grid", "dashboard", Permissions.ViewReports),
+            new("Sales", "Icon.Sales", "sales", Permissions.ProcessSale),
+            new("Invoices", "Icon.Receipt", "invoices", Permissions.ViewReports),
+            new("Products", "Icon.Products", "products", Permissions.ViewCatalogue),
+            new("Inventory", "Icon.Inventory", "inventory", Permissions.ViewCatalogue),
+            new("Reports", "Icon.Reports", "reports", Permissions.ViewReports),
+            new("Shift", "Icon.Shift", "shift", Permissions.ProcessSale),
+            new("Settings", "Icon.Settings", "settings", null)
         };
 
         _session.SessionChanged += OnSessionChanged;
@@ -152,7 +154,8 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
     public string ScannerDetail => Hardware.ScannerDetail;
     public string DrawerDetail => Hardware.DrawerDetail;
 
-    public string ThemeIcon => IsDarkTheme ? "WeatherNight" : "WeatherSunny";
+    /// <summary>Icon resource key for the theme toggle (resolved by the IconKey converter).</summary>
+    public string ThemeIcon => IsDarkTheme ? "Icon.Moon" : "Icon.Sun";
 
     // ── Commands ─────────────────────────────────────────────────────────────────────────────
 
@@ -235,7 +238,9 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
 
         ViewModelBase viewModel = key switch
         {
+            "dashboard" => CreateDashboard(),
             "sales" => _services.GetRequiredService<SalesViewModel>(),
+            "invoices" => _services.GetRequiredService<InvoicesViewModel>(),
             "products" => _services.GetRequiredService<ProductsViewModel>(),
             "inventory" => _services.GetRequiredService<InventoryViewModel>(),
             "reports" => _services.GetRequiredService<ReportsViewModel>(),
@@ -244,13 +249,44 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
             _ => throw new ArgumentOutOfRangeException(nameof(key), key, "Unknown view key.")
         };
 
+        // View models stay UI-agnostic: modal prompts arrive as an optional capability, not a ctor arg.
+        viewModel.AttachDialogs(_services.GetRequiredService<IDialogService>());
+
         _cache[key] = viewModel;
         return viewModel;
     }
 
+    /// <summary>
+    /// The dashboard is created here (not registered directly) because it needs a navigation hook back
+    /// into the shell; wiring it as an event keeps the dependency one-way.
+    /// </summary>
+    private ViewModelBase CreateDashboard()
+    {
+        var dashboard = _services.GetRequiredService<DashboardViewModel>();
+        dashboard.NavigateRequested += async (_, key) =>
+        {
+            try
+            {
+                await ShowAsync(key).ConfigureAwait(true);
+
+                _navigating = true;
+                SelectedNavItem = NavItems.FirstOrDefault(n => n.ViewKey == key);
+                _navigating = false;
+            }
+            catch (Exception ex)
+            {
+                Notifier.Error($"Could not navigate to {key}: {ex.Message}");
+            }
+        };
+
+        return dashboard;
+    }
+
     private static string Describe(string key) => key switch
     {
+        "dashboard" => "Today at a glance — sales, stock alerts and best sellers.",
         "sales" => "Scan, tap, take payment. Shift+F1 opens the drawer.",
+        "invoices" => "Search past sales, reprint a receipt or issue a refund.",
         "products" => "Catalogue maintenance and pricing",
         "inventory" => "Stock levels, adjustments and movement ledger",
         "reports" => "Sales performance and exports",
@@ -336,8 +372,11 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        await ShowAsync("sales").ConfigureAwait(true);
-        SelectedNavItem = NavItems.FirstOrDefault(n => n.ViewKey == "sales");
+        // Landing screen: managers get the dashboard, cashiers go straight to the till.
+        var landing = _session.HasPermission(Permissions.ViewReports) ? "dashboard" : "sales";
+
+        await ShowAsync(landing).ConfigureAwait(true);
+        SelectedNavItem = NavItems.FirstOrDefault(n => n.ViewKey == landing);
     }
 
     private void RefreshSessionChrome()

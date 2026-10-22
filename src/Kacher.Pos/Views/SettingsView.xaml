@@ -70,10 +70,43 @@
                                 </Border>
                             </StackPanel>
 
-                            <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
-                                <Button Content="Open data folder" Style="{StaticResource Kacher.TouchButton}"
+                            <Border Background="{DynamicResource Kacher.SurfaceRaised}" CornerRadius="12"
+                                    Padding="14,12" Margin="0,14,0,0"
+                                    BorderBrush="{DynamicResource Kacher.Divider}" BorderThickness="1">
+                                <Grid>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Path Style="{StaticResource Kacher.IconAccent}" Data="{StaticResource Icon.Database}" />
+                                        <StackPanel Margin="10,0,0,0">
+                                            <TextBlock Text="Last backup" Style="{StaticResource Kacher.Label}" />
+                                            <TextBlock Text="{Binding LastBackupText}" FontSize="13" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource Kacher.TextPrimary}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <Button HorizontalAlignment="Right" Content="Back up now"
+                                            Style="{StaticResource Kacher.TouchButton}"
+                                            Height="40" MinHeight="40" Padding="14,0"
+                                            Command="{Binding CreateBackupCommand}"
+                                            IsEnabled="{Binding CanManageUsers}" />
+                                </Grid>
+                            </Border>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                <Button Style="{StaticResource Kacher.TouchButton}"
                                         Height="46" MinHeight="46" Padding="16,0" Margin="0,0,10,0"
-                                        Command="{Binding OpenDataFolderCommand}" />
+                                        Command="{Binding OpenDataFolderCommand}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Path Style="{StaticResource Kacher.IconMuted}" Data="{StaticResource Icon.Folder}" />
+                                        <TextBlock Text="Open data folder" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource Kacher.TouchButton}"
+                                        Height="46" MinHeight="46" Padding="16,0" Margin="0,0,10,0"
+                                        Command="{Binding OpenBackupFolderCommand}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Path Style="{StaticResource Kacher.IconMuted}" Data="{StaticResource Icon.Upload}" />
+                                        <TextBlock Text="Backups" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
                                 <Button Content="Compact database" Style="{StaticResource Kacher.TouchButton}"
                                         Height="46" MinHeight="46" Padding="16,0"
                                         Command="{Binding CompactDatabaseCommand}"
@@ -120,14 +153,14 @@
                                                     Command="{Binding DataContext.ChangePinCommand,
                                                         RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     CommandParameter="{Binding}">
-                                                <TextBlock Text="&#xE72E;" FontFamily="Segoe MDL2 Assets" FontSize="12" />
+                                                <Path Style="{StaticResource Kacher.IconMuted}" Data="{StaticResource Icon.Lock}" />
                                             </Button>
                                             <Button Style="{StaticResource Kacher.IconButton}" Width="34" Height="34"
                                                     ToolTip="Enable / disable"
                                                     Command="{Binding DataContext.ToggleUserActiveCommand,
                                                         RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     CommandParameter="{Binding}">
-                                                <TextBlock Text="&#xE8FB;" FontFamily="Segoe MDL2 Assets" FontSize="12" />
+                                                <Path Style="{StaticResource Kacher.IconMuted}" Data="{StaticResource Icon.User}" />
                                             </Button>
                                         </StackPanel>
                                     </DataTemplate>

@@ -1,0 +1,313 @@
+<UserControl x:Class="Kacher.Pos.Views.DashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:Kacher.Pos.ViewModels"
+             xmlns:conv="clr-namespace:Kacher.Pos.Converters"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance vm:DashboardViewModel}"
+             d:DesignWidth="1200" d:DesignHeight="800"
+             TextOptions.TextFormattingMode="Display">
+
+    <UserControl.Resources>
+        <conv:RatioToHeightConverter x:Key="RatioToHeight" />
+        <conv:RatioToGridLengthConverter x:Key="RatioToGridLength" />
+        <conv:CountToVisibilityConverter x:Key="CountToVisibility" />
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,8">
+        <StackPanel>
+
+            <!-- ═══════════════════════════════════════════════════════════════════════════════
+                 Hero: greeting + shift state + primary actions
+                 ═══════════════════════════════════════════════════════════════════════════════ -->
+            <Border CornerRadius="20" Padding="24,20" Margin="0,0,0,14">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#FF0F766E" Offset="0" />
+                        <GradientStop Color="#FF115E59" Offset="0.55" />
+                        <GradientStop Color="#FF0B4F4A" Offset="1" />
+                    </LinearGradientBrush>
+                </Border.Background>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel>
+                        <TextBlock Text="{Binding Greeting}" FontSize="13" Foreground="#CCFFFFFF" />
+                        <TextBlock Text="{Binding PeriodLabel}" FontSize="26" FontWeight="Bold"
+                                   Foreground="White" Margin="0,2,0,0" />
+                        <TextBlock Text="{Binding ShiftLabel}" FontSize="12.5" Foreground="#B3FFFFFF"
+                                   Margin="0,8,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Style="{StaticResource Kacher.TouchButton}" Height="46" MinHeight="46"
+                                Padding="18,0" Margin="0,0,10,0"
+                                Background="#22FFFFFF" BorderBrush="#33FFFFFF"
+                                Command="{Binding OpenCommand}" CommandParameter="sales">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Style="{StaticResource Kacher.Icon}" Width="18" Height="18"
+                                      Data="{StaticResource Icon.Sales}" Stroke="White" />
+                                <TextBlock Text="New sale" Foreground="White" FontWeight="SemiBold"
+                                           Margin="8,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+
+                        <Button Style="{StaticResource Kacher.TouchButton}" Height="46" MinHeight="46"
+                                Padding="18,0"
+                                Background="#22FFFFFF" BorderBrush="#33FFFFFF"
+                                Command="{Binding RefreshCommand}" ToolTip="Refresh figures">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Style="{StaticResource Kacher.Icon}" Width="18" Height="18"
+                                      Data="{StaticResource Icon.Refresh}" Stroke="White" />
+                                <TextBlock Text="Refresh" Foreground="White" Margin="8,0,0,0"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ═══════════════════════════════════════════════════════════════════════════════
+                 KPI cards
+                 ═══════════════════════════════════════════════════════════════════════════════ -->
+            <ItemsControl ItemsSource="{Binding Kpis}" Margin="0,0,0,6">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Rows="1" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource Kacher.KpiTile}" Margin="0,0,12,12">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <Border Style="{StaticResource Kacher.IconBadge}"
+                                        Background="{Binding ToneHex, Converter={StaticResource HexBrush}}"
+                                        Opacity="0.16" />
+
+                                <Path Grid.Column="0" Style="{StaticResource Kacher.Icon}" Width="22" Height="22"
+                                      Data="{Binding IconKey, Converter={StaticResource IconKey}}"
+                                      Stroke="{Binding ToneHex, Converter={StaticResource HexBrush}}"
+                                      StrokeThickness="1.8" />
+
+                                <StackPanel Grid.Column="1" Margin="14,0,0,0">
+                                    <TextBlock Text="{Binding Label}" Style="{StaticResource Kacher.Label}" />
+                                    <TextBlock Text="{Binding Value}" FontSize="21" FontWeight="Bold"
+                                               Foreground="{DynamicResource Kacher.TextPrimary}"
+                                               Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Caption}" Style="{StaticResource Kacher.Caption}"
+                                               FontSize="11" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- ═══════════════════════════════════════════════════════════════════════════════
+                 Two-column body: attention + top sellers
+                 ═══════════════════════════════════════════════════════════════════════════════ -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="1.15*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Needs attention -->
+                <Border Grid.Column="0" Style="{StaticResource Kacher.Card}" Margin="0,0,12,12">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                            <Path Style="{StaticResource Kacher.IconMuted}" Data="{StaticResource Icon.Warning}" />
+                            <TextBlock Text="Needs attention" Style="{StaticResource Kacher.Title}"
+                                       FontSize="16" Margin="8,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <Border Background="{DynamicResource Kacher.SurfaceRaised}" CornerRadius="14"
+                                Padding="16,14">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasAttention}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <TextBlock Text="Everything is in order for today." Style="{StaticResource Kacher.Caption}" />
+                        </Border>
+
+                        <ItemsControl ItemsSource="{Binding Attention}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{DynamicResource Kacher.SurfaceRaised}"
+                                            CornerRadius="14" Padding="14,12" Margin="0,0,0,8"
+                                            BorderBrush="{DynamicResource Kacher.Divider}" BorderThickness="1">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <Border Width="36" Height="36" CornerRadius="12"
+                                                    Background="{Binding ToneHex, Converter={StaticResource HexBrush}}"
+                                                    Opacity="0.18" />
+
+                                            <Path Grid.Column="0" Style="{StaticResource Kacher.Icon}" Width="18" Height="18"
+                                                  Data="{Binding IconKey, Converter={StaticResource IconKey}}"
+                                                  Stroke="{Binding ToneHex, Converter={StaticResource HexBrush}}" />
+
+                                            <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource Kacher.TextPrimary}"
+                                                           TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding Detail}" Style="{StaticResource Kacher.Caption}"
+                                                           FontSize="11.5" Margin="0,3,0,0" />
+                                            </StackPanel>
+
+                                            <Button Grid.Column="2" Style="{StaticResource Kacher.IconButton}"
+                                                    Width="Auto" Height="34" Padding="12,0"
+                                                    VerticalAlignment="Center"
+                                                    Command="{Binding DataContext.OpenCommand,
+                                                              RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding ActionKey}">
+                                                <TextBlock Text="{Binding ActionLabel}" FontSize="11.5"
+                                                           VerticalAlignment="Center" />
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- Best sellers -->
+                <Border Grid.Column="1" Style="{StaticResource Kacher.Card}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                            <Path Style="{StaticResource Kacher.IconMuted}" Data="{StaticResource Icon.Trend}" />
+                            <TextBlock Text="Best sellers today" Style="{StaticResource Kacher.Title}"
+                                       FontSize="16" Margin="8,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <Border Background="{DynamicResource Kacher.SurfaceRaised}" CornerRadius="14"
+                                Padding="16,14">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasTopSellers}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <TextBlock Text="No sales recorded yet today — scan the first item to get started."
+                                       Style="{StaticResource Kacher.Caption}" />
+                        </Border>
+
+                        <ItemsControl ItemsSource="{Binding TopSellers}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="26" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Text="{Binding Rank}" FontSize="13" FontWeight="Bold"
+                                                   Foreground="{DynamicResource Kacher.TextMuted}"
+                                                   VerticalAlignment="Center" />
+
+                                        <StackPanel Grid.Column="1" Margin="6,0,12,0">
+                                            <TextBlock Text="{Binding Name}" FontSize="13"
+                                                       Foreground="{DynamicResource Kacher.TextPrimary}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <Grid Height="5" Margin="0,5,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="{Binding Ratio, Converter={StaticResource RatioToGridLength}}" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.ColumnSpan="2" Background="{DynamicResource Kacher.Divider}" CornerRadius="3" />
+                                                <Border Grid.Column="0" Background="{DynamicResource Kacher.Accent}"
+                                                        CornerRadius="3" MinWidth="6" />
+                                            </Grid>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="2" HorizontalAlignment="Right">
+                                            <TextBlock Text="{Binding RevenueText}" FontSize="12.5" FontWeight="SemiBold"
+                                                       HorizontalAlignment="Right"
+                                                       Foreground="{DynamicResource Kacher.TextPrimary}" />
+                                            <TextBlock Text="{Binding QuantityText}" Style="{StaticResource Kacher.Caption}"
+                                                       FontSize="11" HorizontalAlignment="Right" />
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- ═══════════════════════════════════════════════════════════════════════════════
+                 Hourly revenue strip
+                 ═══════════════════════════════════════════════════════════════════════════════ -->
+            <Border Style="{StaticResource Kacher.Card}" Margin="0,0,0,12">
+                <StackPanel>
+                    <Grid Margin="0,0,0,14">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource Kacher.IconMuted}" Data="{StaticResource Icon.Calendar}" />
+                            <TextBlock Text="Today by hour" Style="{StaticResource Kacher.Title}"
+                                       FontSize="16" Margin="8,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <Border HorizontalAlignment="Right" Style="{StaticResource Kacher.Pill}">
+                            <TextBlock Text="{Binding PeakHourText, StringFormat=peak {0}}" FontSize="11"
+                                       Foreground="{DynamicResource Kacher.TextSecondary}" />
+                        </Border>
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{Binding Hourly}" Height="130">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Rows="1" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="3,0" ToolTip="{Binding Tooltip}">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <Border VerticalAlignment="Bottom" CornerRadius="6,6,3,3" MinHeight="3"
+                                            Background="{DynamicResource Kacher.Accent}"
+                                            Height="{Binding Ratio, Converter={StaticResource RatioToHeight}}"
+                                            ToolTip="{Binding Tooltip}" />
+
+                                    <TextBlock Grid.Row="1" Text="{Binding Label}" FontSize="10"
+                                               HorizontalAlignment="Center" Margin="0,6,0,0"
+                                               Foreground="{DynamicResource Kacher.TextMuted}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

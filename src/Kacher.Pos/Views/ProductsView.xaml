@@ -99,14 +99,14 @@
                                                 Command="{Binding DataContext.EditProductCommand,
                                                     RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}" ToolTip="Edit">
-                                            <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" FontSize="12" />
+                                            <Path Style="{StaticResource Kacher.IconMuted}" Data="{StaticResource Icon.Edit}" />
                                         </Button>
                                         <Button Style="{StaticResource Kacher.IconButton}" Width="34" Height="34"
                                                 Command="{Binding DataContext.DeleteProductCommand,
                                                     RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}" ToolTip="Retire">
-                                            <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="12"
-                                                       Foreground="{DynamicResource Kacher.Danger}" />
+                                            <Path Style="{StaticResource Kacher.IconMuted}" Data="{StaticResource Icon.Trash}"
+                                                       Stroke="{DynamicResource Kacher.Danger}" />
                                         </Button>
                                     </StackPanel>
                                 </DataTemplate>

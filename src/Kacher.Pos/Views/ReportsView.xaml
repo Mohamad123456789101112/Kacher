@@ -34,7 +34,7 @@
             <StackPanel Orientation="Horizontal">
                 <Button Style="{StaticResource Kacher.IconButton}" Command="{Binding PreviousDayCommand}"
                         ToolTip="Previous day">
-                    <TextBlock Text="&#xE76B;" FontFamily="Segoe MDL2 Assets" FontSize="12" />
+                    <Path Style="{StaticResource Kacher.IconMuted}" Width="14" Height="14" Data="{StaticResource Icon.Collapse}" />
                 </Button>
 
                 <Border Background="{DynamicResource Kacher.SurfaceAlt}" CornerRadius="12" Padding="12,6"
@@ -45,7 +45,7 @@
 
                 <Button Style="{StaticResource Kacher.IconButton}" Command="{Binding NextDayCommand}"
                         ToolTip="Next day">
-                    <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="12" />
+                    <Path Style="{StaticResource Kacher.IconMuted}" Width="14" Height="14" Data="{StaticResource Icon.Expand}" />
                 </Button>
 
                 <Button Content="Today" Style="{StaticResource Kacher.TouchButton}" Height="42" MinHeight="42"
@@ -69,66 +69,146 @@
             </StackPanel>
         </Grid>
 
-        <!-- KPI strip -->
+        <!-- KPI strip: same visual language as the dashboard (icon badge + label + value) -->
         <WrapPanel Grid.Row="1" Margin="0,0,0,12">
-            <Border Style="{StaticResource KpiCard}">
-                <StackPanel>
-                    <TextBlock Text="GROSS SALES" Style="{StaticResource Kacher.Label}" />
-                    <TextBlock Text="{Binding GrossSales, StringFormat={}{0:0.00} EGP}"
-                               Style="{StaticResource Kacher.Title}"
-                               Foreground="{DynamicResource Kacher.Accent}" />
-                    <TextBlock Text="{Binding InvoiceCount, StringFormat={}{0} invoices}"
-                               Style="{StaticResource Kacher.Caption}" />
-                </StackPanel>
+
+            <Border Style="{StaticResource KpiCard}" MinWidth="196">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Style="{StaticResource Kacher.IconBadge}" Background="{DynamicResource Kacher.AccentSoft}">
+                        <Path Style="{StaticResource Kacher.IconAccent}" Width="20" Height="20"
+                              Data="{StaticResource Icon.Trend}" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="GROSS SALES" Style="{StaticResource Kacher.Label}" />
+                        <TextBlock Text="{Binding GrossSales, StringFormat={}{0:0.00} EGP}"
+                                   FontSize="20" FontWeight="Bold"
+                                   Foreground="{DynamicResource Kacher.TextPrimary}" />
+                        <TextBlock Text="{Binding InvoiceCount, StringFormat={}{0} invoices}"
+                                   Style="{StaticResource Kacher.Caption}" />
+                    </StackPanel>
+                </Grid>
             </Border>
 
-            <Border Style="{StaticResource KpiCard}">
-                <StackPanel>
-                    <TextBlock Text="NET (EX-VAT)" Style="{StaticResource Kacher.Label}" />
-                    <TextBlock Text="{Binding NetSales, StringFormat={}{0:0.00}}" Style="{StaticResource Kacher.Title}" />
-                    <TextBlock Text="before tax" Style="{StaticResource Kacher.Caption}" />
-                </StackPanel>
+            <Border Style="{StaticResource KpiCard}" MinWidth="176">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Style="{StaticResource Kacher.IconBadge}" Background="{DynamicResource Kacher.SurfaceHigh}">
+                        <Path Style="{StaticResource Kacher.IconMuted}" Width="20" Height="20"
+                              Data="{StaticResource Icon.Reports}" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="NET (EX-VAT)" Style="{StaticResource Kacher.Label}" />
+                        <TextBlock Text="{Binding NetSales, StringFormat={}{0:0.00}}"
+                                   FontSize="20" FontWeight="Bold"
+                                   Foreground="{DynamicResource Kacher.TextPrimary}" />
+                        <TextBlock Text="before tax" Style="{StaticResource Kacher.Caption}" />
+                    </StackPanel>
+                </Grid>
             </Border>
 
-            <Border Style="{StaticResource KpiCard}">
-                <StackPanel>
-                    <TextBlock Text="TAX COLLECTED" Style="{StaticResource Kacher.Label}" />
-                    <TextBlock Text="{Binding TaxTotal, StringFormat={}{0:0.00}}" Style="{StaticResource Kacher.Title}" />
-                    <TextBlock Text="VAT payable" Style="{StaticResource Kacher.Caption}" />
-                </StackPanel>
+            <Border Style="{StaticResource KpiCard}" MinWidth="176">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Style="{StaticResource Kacher.IconBadge}" Background="{DynamicResource Kacher.SurfaceHigh}">
+                        <Path Style="{StaticResource Kacher.IconMuted}" Width="20" Height="20"
+                              Data="{StaticResource Icon.Tag}" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="VAT COLLECTED" Style="{StaticResource Kacher.Label}" />
+                        <TextBlock Text="{Binding TaxTotal, StringFormat={}{0:0.00}}"
+                                   FontSize="20" FontWeight="Bold"
+                                   Foreground="{DynamicResource Kacher.TextPrimary}" />
+                        <TextBlock Text="payable to the tax office" Style="{StaticResource Kacher.Caption}" />
+                    </StackPanel>
+                </Grid>
             </Border>
 
-            <Border Style="{StaticResource KpiCard}">
-                <StackPanel>
-                    <TextBlock Text="AVERAGE BASKET" Style="{StaticResource Kacher.Label}" />
-                    <TextBlock Text="{Binding AverageBasket, StringFormat={}{0:0.00}}" Style="{StaticResource Kacher.Title}" />
-                    <TextBlock Text="per invoice" Style="{StaticResource Kacher.Caption}" />
-                </StackPanel>
+            <Border Style="{StaticResource KpiCard}" MinWidth="176">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Style="{StaticResource Kacher.IconBadge}" Background="{DynamicResource Kacher.SurfaceHigh}">
+                        <Path Style="{StaticResource Kacher.IconMuted}" Width="20" Height="20"
+                              Data="{StaticResource Icon.Cart}" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="AVERAGE BASKET" Style="{StaticResource Kacher.Label}" />
+                        <TextBlock Text="{Binding AverageBasket, StringFormat={}{0:0.00}}"
+                                   FontSize="20" FontWeight="Bold"
+                                   Foreground="{DynamicResource Kacher.TextPrimary}" />
+                        <TextBlock Text="per invoice" Style="{StaticResource Kacher.Caption}" />
+                    </StackPanel>
+                </Grid>
             </Border>
 
-            <Border Style="{StaticResource KpiCard}">
-                <StackPanel>
-                    <TextBlock Text="CASH / CARD" Style="{StaticResource Kacher.Label}" />
-                    <TextBlock Style="{StaticResource Kacher.Money}" Margin="0,4,0,0">
-                        <Run Text="{Binding CashTotal, StringFormat={}{0:0.00}}" />
-                        <Run Text=" / " />
-                        <Run Text="{Binding CardTotal, StringFormat={}{0:0.00}}" />
-                    </TextBlock>
-                    <TextBlock Style="{StaticResource Kacher.Caption}">
-                        <Run Text="Refunds " />
-                        <Run Text="{Binding RefundTotal, StringFormat={}{0:0.00}}" />
-                    </TextBlock>
-                </StackPanel>
+            <Border Style="{StaticResource KpiCard}" MinWidth="196">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Style="{StaticResource Kacher.IconBadge}" Background="{DynamicResource Kacher.SurfaceHigh}">
+                        <Path Style="{StaticResource Kacher.IconMuted}" Width="20" Height="20"
+                              Data="{StaticResource Icon.Cash}" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="CASH / CARD" Style="{StaticResource Kacher.Label}" />
+                        <TextBlock FontSize="15" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Kacher.TextPrimary}">
+                            <Run Text="{Binding CashTotal, StringFormat={}{0:0.00}, Mode=OneWay}" />
+                            <Run Text=" / " />
+                            <Run Text="{Binding CardTotal, StringFormat={}{0:0.00}, Mode=OneWay}" />
+                        </TextBlock>
+                        <TextBlock Style="{StaticResource Kacher.Caption}">
+                            <Run Text="Refunds " />
+                            <Run Text="{Binding RefundTotal, StringFormat={}{0:0.00}, Mode=OneWay}" />
+                        </TextBlock>
+                    </StackPanel>
+                </Grid>
             </Border>
 
-            <Border Style="{StaticResource KpiCard}">
-                <StackPanel>
-                    <TextBlock Text="DISCOUNTS" Style="{StaticResource Kacher.Label}" />
-                    <TextBlock Text="{Binding DiscountTotal, StringFormat={}{0:0.00}}"
-                               Style="{StaticResource Kacher.Title}"
-                               Foreground="{DynamicResource Kacher.Warning}" />
-                    <TextBlock Text="given today" Style="{StaticResource Kacher.Caption}" />
-                </StackPanel>
+            <Border Style="{StaticResource KpiCard}" MinWidth="176" Margin="0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Style="{StaticResource Kacher.IconBadge}" Background="{DynamicResource Kacher.WarningSoft}">
+                        <Path Style="{StaticResource Kacher.Icon}" Width="20" Height="20"
+                              Stroke="{DynamicResource Kacher.Warning}" Data="{StaticResource Icon.Tag}" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="DISCOUNTS" Style="{StaticResource Kacher.Label}" />
+                        <TextBlock Text="{Binding DiscountTotal, StringFormat={}{0:0.00}}"
+                                   FontSize="20" FontWeight="Bold"
+                                   Foreground="{DynamicResource Kacher.Warning}" />
+                        <TextBlock Text="given today" Style="{StaticResource Kacher.Caption}" />
+                    </StackPanel>
+                </Grid>
             </Border>
         </WrapPanel>
 

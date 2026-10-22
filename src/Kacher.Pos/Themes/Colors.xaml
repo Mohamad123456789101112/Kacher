@@ -16,6 +16,10 @@
     <SolidColorBrush x:Key="Kacher.Surface" Color="#FF101A1C" />
     <SolidColorBrush x:Key="Kacher.SurfaceAlt" Color="#FF162326" />
     <SolidColorBrush x:Key="Kacher.SurfaceRaised" Color="#FF1D2D31" />
+
+    <!-- One step above the raised surface: used for neutral icon badges so they read as a distinct
+         chip rather than disappearing into the card behind them. -->
+    <SolidColorBrush x:Key="Kacher.SurfaceHigh" Color="#FF223438" />
     <SolidColorBrush x:Key="Kacher.Divider" Color="#FF2A3C40" />
     <SolidColorBrush x:Key="Kacher.TextPrimary" Color="#FFF1F5F6" />
     <SolidColorBrush x:Key="Kacher.TextSecondary" Color="#FFB4C4C7" />
@@ -29,6 +33,12 @@
     <SolidColorBrush x:Key="Kacher.Warning" Color="#FFF59E0B" />
     <SolidColorBrush x:Key="Kacher.Danger" Color="#FFEF4444" />
     <SolidColorBrush x:Key="Kacher.Info" Color="#FF38BDF8" />
+
+    <!-- 13 % tints of the semantic colours, for icon badges and inline status chips. -->
+    <SolidColorBrush x:Key="Kacher.WarningSoft" Color="#22F59E0B" />
+    <SolidColorBrush x:Key="Kacher.SuccessSoft" Color="#2222C55E" />
+    <SolidColorBrush x:Key="Kacher.DangerSoft" Color="#22EF4444" />
+    <SolidColorBrush x:Key="Kacher.InfoSoft" Color="#2238BDF8" />
 
     <!-- Money highlight (receipt total / change due) -->
     <LinearGradientBrush x:Key="Kacher.TotalGradient" StartPoint="0,0" EndPoint="1,1">

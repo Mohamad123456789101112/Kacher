@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Kacher.Pos.Infrastructure;
+using Kacher.Pos.Services;
 
 namespace Kacher.Pos.ViewModels;
 
@@ -23,7 +24,18 @@ public abstract partial class ViewModelBase : ObservableObject
 
     protected IUserNotifier Notifier { get; }
 
+    /// <summary>
+    /// Modal confirmation and prompts. Optional so existing view models (and unit tests) keep working
+    /// without a UI; <see cref="HasDialogs"/> tells a view model whether it may ask the operator.
+    /// </summary>
+    protected IDialogService? Dialogs { get; private set; }
+
+    protected bool HasDialogs => Dialogs is not null;
+
     protected ViewModelBase(IUserNotifier notifier) => Notifier = notifier;
+
+    /// <summary>Called by the composition root for view models that need modal prompts.</summary>
+    public void AttachDialogs(IDialogService dialogs) => Dialogs = dialogs;
 
     /// <summary>Called once when the shell navigates to the view.</summary>
     public virtual Task LoadAsync(CancellationToken ct = default) => Task.CompletedTask;

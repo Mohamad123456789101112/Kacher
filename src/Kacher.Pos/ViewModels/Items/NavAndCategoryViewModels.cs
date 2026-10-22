@@ -6,18 +6,18 @@ namespace Kacher.Pos.ViewModels.Items;
 /// <summary>Sidebar entry. <see cref="Permission"/> is enforced by the shell when navigating.</summary>
 public sealed class NavItemViewModel
 {
-    public NavItemViewModel(string label, string icon, string viewKey, string? permission = null)
+    public NavItemViewModel(string label, string iconKey, string viewKey, string? permission = null)
     {
         Label = label;
-        Icon = icon;
+        IconKey = iconKey;
         ViewKey = viewKey;
         Permission = permission;
     }
 
     public string Label { get; }
 
-    /// <summary>MaterialDesign PackIcon kind name, e.g. "PointOfSale".</summary>
-    public string Icon { get; }
+    /// <summary>Key into Themes/Icons.xaml, e.g. <c>"Icon.Sales"</c> (resolved by a converter).</summary>
+    public string IconKey { get; }
 
     /// <summary>Stable key resolved by MainViewModel's view-model factory.</summary>
     public string ViewKey { get; }
