@@ -134,6 +134,15 @@ public partial class MainWindow : Window
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         // Shell shortcuts always win.
+
+        // Ctrl+1…8 jump straight to a screen (the rail order matches the digits).
+        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key is >= Key.D1 and <= Key.D9)
+        {
+            _viewModel.NavigateByShortcut(e.Key - Key.D1);
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.F1)
         {
             _viewModel.OpenDrawerCommand.Execute(null);

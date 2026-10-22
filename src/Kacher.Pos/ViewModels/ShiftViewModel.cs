@@ -24,6 +24,7 @@ public sealed partial class ShiftViewModel : ViewModelBase
     private readonly IReceiptPrinter _printer;
     private readonly IHardwareConfigRepository _hardware;
     private readonly IPdfReceiptService _pdf;
+    private readonly IBackupService _backups;
 
     public ShiftViewModel(
         IShiftService shifts,
@@ -32,6 +33,7 @@ public sealed partial class ShiftViewModel : ViewModelBase
         IReceiptPrinter printer,
         IHardwareConfigRepository hardware,
         IPdfReceiptService pdf,
+        IBackupService backups,
         IUserNotifier notifier) : base(notifier)
     {
         _shifts = shifts;
@@ -40,6 +42,7 @@ public sealed partial class ShiftViewModel : ViewModelBase
         _printer = printer;
         _hardware = hardware;
         _pdf = pdf;
+        _backups = backups;
 
         Title = "Shift & End of Day";
     }
@@ -301,6 +304,10 @@ public sealed partial class ShiftViewModel : ViewModelBase
             Notifier.Success($"Shift closed. Difference {summary.CashDifference:0.00} EGP.");
 
             await PrintZReportInternalAsync(summary, ct).ConfigureAwait(true);
+
+            // Snapshot the database at the moment the day's trade is finalised: if the terminal is
+            // stolen or the disk dies overnight, the closed day is still recoverable.
+            await _backups.EnsureRecentAsync(TimeSpan.FromHours(1), ct).ConfigureAwait(true);
         }, "Could not close the shift.");
     }
 

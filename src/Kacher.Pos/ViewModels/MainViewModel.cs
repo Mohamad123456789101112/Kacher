@@ -204,6 +204,21 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
 
     private string CurrentKey { get; set; } = "sales";
 
+    /// <summary>
+    /// Ctrl+1…8 navigation for keyboard-first operators: the rail is ordered exactly like
+    /// <see cref="NavItems"/>, so the shortcut index maps straight onto it. Permission checks and
+    /// "already loaded" bookkeeping are handled by the normal selection path.
+    /// </summary>
+    public void NavigateByShortcut(int index)
+    {
+        if (index < 0 || index >= NavItems.Count)
+        {
+            return;
+        }
+
+        SelectedNavItem = NavItems[index];
+    }
+
     /// <summary>Navigates programmatically (used after sign-in and by deep links).</summary>
     public async Task ShowAsync(string key)
     {

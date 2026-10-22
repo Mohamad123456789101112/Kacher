@@ -72,6 +72,13 @@ public sealed class BackupService : IBackupService
         var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
         var path = Path.Combine(BackupDirectory, $"{FilePrefix}{stamp}{FileExtension}");
 
+        // VACUUM INTO refuses to overwrite, so two clicks in the same second would fail. Suffix a
+        // counter instead of throwing at the operator.
+        for (var n = 2; File.Exists(path); n++)
+        {
+            path = Path.Combine(BackupDirectory, $"{FilePrefix}{stamp}-{n}{FileExtension}");
+        }
+
         // VACUUM INTO writes a fully-formed, defragmented copy of the live database in one statement.
         var target = path.Replace("'", "''", StringComparison.Ordinal);
 
