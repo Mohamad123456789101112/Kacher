@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -264,5 +265,69 @@ public sealed class RatioToGridLengthConverter : IValueConverter
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        Binding.DoNothing;
+}
+
+/// <summary>
+/// Resolves an icon resource key (e.g. <c>"Icon.Cart"</c>) to the <see cref="Geometry"/> declared in
+/// <c>Themes/Icons.xaml</c>. Keeps icon choice in the view model as a plain string — no WPF types
+/// leak into the presentation logic — while the artwork stays declarative in XAML.
+/// </summary>
+public sealed class ResourceIconConverter : IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is not string key || string.IsNullOrWhiteSpace(key))
+        {
+            return null;
+        }
+
+        // TryFindResource also walks merged dictionaries, so the app-level icon set is found from
+        // any view, dialog or control template.
+        return Application.Current?.TryFindResource(key) as Geometry;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Hex string → <see cref="System.Windows.Media.Color"/>. Needed wherever a colour has to be *part*
+/// of a brush (a gradient stop, a drop shadow) rather than the brush itself.
+/// </summary>
+public sealed class HexToColorConverter : IValueConverter
+{
+    private static readonly Dictionary<string, Color> Cache = new(StringComparer.OrdinalIgnoreCase);
+
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var hex = value as string;
+
+        if (string.IsNullOrWhiteSpace(hex))
+        {
+            return Color.FromRgb(0x33, 0x41, 0x55);
+        }
+
+        lock (Cache)
+        {
+            if (Cache.TryGetValue(hex, out var cached))
+            {
+                return cached;
+            }
+
+            try
+            {
+                var converted = (Color)ColorConverter.ConvertFromString(hex)!;
+                Cache[hex] = converted;
+                return converted;
+            }
+            catch (FormatException)
+            {
+                return Color.FromRgb(0x33, 0x41, 0x55);
+            }
+        }
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         Binding.DoNothing;
 }

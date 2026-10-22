@@ -18,6 +18,8 @@
                 <!-- App palette + component styles -->
                 <ResourceDictionary Source="Themes/Colors.xaml" />
                 <ResourceDictionary Source="Themes/Styles.xaml" />
+                <!-- Vector icon set (24 × 24 grid, stroke style). No icon font, no DPI surprises. -->
+                <ResourceDictionary Source="Themes/Icons.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
             <!-- Global converters: available to every view and dialog without local resources -->
@@ -27,6 +29,9 @@
             <conv:InverseBooleanConverter x:Key="InverseBool" />
             <conv:CurrencyConverter x:Key="Currency" />
             <conv:HexToBrushConverter x:Key="HexBrush" />
+            <conv:HexToColorConverter x:Key="HexColor" />
+            <conv:ImagePathToSourceConverter x:Key="ImageSource" />
+            <conv:ResourceIconConverter x:Key="IconKey" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

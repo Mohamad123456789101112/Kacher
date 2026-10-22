@@ -1,0 +1,49 @@
+KACHER POS — END USER LICENCE AGREEMENT
+======================================
+
+Version 1.0
+
+IMPORTANT: READ THIS AGREEMENT BEFORE INSTALLING OR USING KACHER POS.
+
+1. LICENCE GRANT
+   The licensor grants you a non-exclusive, non-transferable licence to install and use one copy of
+   Kacher POS ("the Software") on one (1) point-of-sale terminal, for the purpose of operating your
+   own retail business. Additional terminals require additional licences.
+
+2. RESTRICTIONS
+   You may not: (a) redistribute, sublicense, rent, lease or sell the Software; (b) modify, reverse
+   engineer, decompile or disassemble the Software except to the extent permitted by applicable law;
+   (c) remove or alter any proprietary notices; (d) use the Software to process sales for third
+   parties as a service bureau without a written agreement.
+
+3. YOUR DATA
+   All data created by the Software — products, sales, invoices and shifts — is stored locally on
+   your hardware in a SQLite database. You own that data. The licensor has no access to it and
+   provides no hosted service. You are responsible for backups; the Software creates automatic daily
+   snapshots under %LOCALAPPDATA%\Kacher\backups and you should copy them off the terminal regularly.
+
+4. SUPPORT AND UPDATES
+   Support and update entitlements are defined by the commercial agreement under which you obtained
+   the Software. Nothing in this document obliges the licensor to provide updates.
+
+5. NO WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+   NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+   NON-INFRINGEMENT. YOU ARE RESPONSIBLE FOR VERIFYING THAT THE SOFTWARE MEETS YOUR ACCOUNTING, TAX
+   AND REGULATORY REQUIREMENTS BEFORE USING IT IN A LIVE ENVIRONMENT.
+
+6. LIMITATION OF LIABILITY
+   TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE LICENSOR SHALL NOT BE LIABLE FOR ANY INDIRECT,
+   INCIDENTAL, SPECIAL OR CONSEQUENTIAL DAMAGES, OR FOR LOSS OF PROFITS, REVENUE OR DATA, ARISING OUT
+   OF THE USE OF OR INABILITY TO USE THE SOFTWARE. THE LICENSOR'S TOTAL LIABILITY SHALL NOT EXCEED THE
+   AMOUNT YOU PAID FOR THE LICENCE.
+
+7. TERMINATION
+   This licence terminates automatically if you breach any of its terms. On termination you must stop
+   using the Software and remove it from your systems. Your data remains yours.
+
+8. GOVERNING LAW
+   This agreement is governed by the laws of the jurisdiction in which the licensor is established,
+   without regard to conflict-of-law rules.
+
+By installing the Software you accept these terms.

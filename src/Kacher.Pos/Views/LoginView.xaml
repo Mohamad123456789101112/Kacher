@@ -6,38 +6,57 @@
              xmlns:vm="clr-namespace:Kacher.Pos.ViewModels"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance vm:LoginViewModel}"
-             d:DesignWidth="420" d:DesignHeight="600">
+             d:DesignWidth="440" d:DesignHeight="680"
+             TextOptions.TextFormattingMode="Display">
 
     <Grid>
         <StackPanel VerticalAlignment="Center">
-            <TextBlock Text="Sign in" Style="{StaticResource Kacher.Display}" />
-            <TextBlock Text="{Binding CashierHint}" Style="{StaticResource Kacher.Subtitle}" Margin="0,6,0,24" />
+
+            <!-- Brand -->
+            <Border Width="72" Height="72" CornerRadius="22" HorizontalAlignment="Center"
+                    ClipToBounds="True">
+                <Image Source="pack://application:,,,/Assets/kacher.png" Stretch="UniformToFill"
+                       RenderOptions.BitmapScalingMode="HighQuality" />
+            </Border>
+
+            <TextBlock Text="Kacher POS" Style="{StaticResource Kacher.Display}" FontSize="26"
+                       HorizontalAlignment="Center" Margin="0,16,0,0" />
+            <TextBlock Text="{Binding CashierHint}" Style="{StaticResource Kacher.Subtitle}"
+                       HorizontalAlignment="Center" Margin="0,4,0,0" TextAlignment="Center"
+                       TextWrapping="Wrap" MaxWidth="320" />
 
             <!-- PIN display -->
             <Border Background="{DynamicResource Kacher.SurfaceRaised}"
-                    CornerRadius="16" Padding="24,20"
+                    CornerRadius="18" Padding="26,18" Margin="0,24,0,0"
                     BorderBrush="{DynamicResource Kacher.Divider}" BorderThickness="1">
                 <StackPanel>
                     <TextBlock Text="{Binding MaskedPin}"
-                               FontSize="34"
+                               FontSize="36"
                                HorizontalAlignment="Center"
                                Foreground="{DynamicResource Kacher.Accent}"
                                FontFamily="Segoe UI Symbol" />
-                    <TextBlock Text="PIN is 4–6 digits"
-                               Style="{StaticResource Kacher.Caption}"
-                               HorizontalAlignment="Center" Margin="0,8,0,0" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,8,0,0">
+                        <Path Style="{StaticResource Kacher.IconMuted}" Width="13" Height="13"
+                              Data="{StaticResource Icon.Lock}" Margin="0,0,6,0" />
+                        <TextBlock Text="PIN is 4–6 digits · NumPad or keyboard works too"
+                                   Style="{StaticResource Kacher.Caption}" VerticalAlignment="Center" />
+                    </StackPanel>
                 </StackPanel>
             </Border>
 
             <!-- Error -->
-            <Border Background="#33EF4444" CornerRadius="10" Padding="12,8" Margin="0,14,0,0"
+            <Border Background="#33EF4444" CornerRadius="12" Padding="14,10" Margin="0,12,0,0"
                     Visibility="{Binding ErrorMessage, Converter={StaticResource NullToVisibility}}">
-                <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource Kacher.Danger}"
-                           FontSize="13" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal">
+                    <Path Width="16" Height="16" Stretch="Uniform" Fill="Transparent" StrokeThickness="1.8"
+                          Stroke="{DynamicResource Kacher.Danger}" Data="{StaticResource Icon.Warning}" />
+                    <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource Kacher.Danger}"
+                               FontSize="12.5" TextWrapping="Wrap" Margin="8,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
             </Border>
 
             <!-- Keypad -->
-            <Grid Margin="0,20,0,0">
+            <Grid Margin="0,18,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition />
                     <ColumnDefinition />
@@ -77,18 +96,25 @@
                         Command="{Binding AppendDigitCommand}" CommandParameter="0" />
                 <Button Grid.Row="3" Grid.Column="2" Style="{StaticResource Kacher.PinKey}"
                         Command="{Binding BackspaceCommand}" ToolTip="Backspace">
-                    <TextBlock Text="&#xE894;" FontFamily="Segoe MDL2 Assets" FontSize="22" />
+                    <Path Style="{StaticResource Kacher.IconAccent}" Width="26" Height="26"
+                          Data="{StaticResource Icon.Backspace}" />
                 </Button>
             </Grid>
 
-            <Button Content="Sign in"
-                    Command="{Binding SignInCommand}"
+            <Button Command="{Binding SignInCommand}"
                     IsEnabled="{Binding CanSubmit}"
                     Style="{StaticResource Kacher.PrimaryButton}"
-                    Height="62" Margin="6,18,6,0" FontSize="17" />
+                    Height="62" Margin="6,18,6,0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Sign in" FontSize="17" FontWeight="Bold" VerticalAlignment="Center" />
+                    <Path Width="18" Height="18" Stretch="Uniform" Fill="Transparent" Stroke="White"
+                          StrokeThickness="2" Data="{StaticResource Icon.ArrowRight}"
+                          Margin="10,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
 
-            <TextBlock Style="{StaticResource Kacher.Caption}" Margin="0,20,0,0"
-                       TextAlignment="Center"
+            <TextBlock Style="{StaticResource Kacher.Caption}" Margin="0,18,0,0"
+                       TextAlignment="Center" TextWrapping="Wrap"
                        Text="Demo operators — Admin 1234 · Supervisor 2468 · Cashier 1111. Change these in Settings before going live." />
         </StackPanel>
     </Grid>

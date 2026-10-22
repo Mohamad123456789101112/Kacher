@@ -20,8 +20,9 @@
                 HorizontalAlignment="Center" Padding="40"
                 Visibility="{Binding HasOpenShift, Converter={StaticResource InverseBoolToVisibility}}">
             <StackPanel>
-                <TextBlock Text="&#xE7E8;" FontFamily="Segoe MDL2 Assets" FontSize="44"
-                           Foreground="{DynamicResource Kacher.Accent}" HorizontalAlignment="Center" />
+                <Path Width="46" Height="46" Stretch="Uniform" Fill="Transparent" StrokeThickness="1.2"
+                      StrokeLineJoin="Round" Data="{StaticResource Icon.Shift}"
+                      Stroke="{DynamicResource Kacher.Accent}" HorizontalAlignment="Center" />
                 <TextBlock Text="Start a shift" Style="{StaticResource Kacher.Display}"
                            HorizontalAlignment="Center" Margin="0,16,0,0" />
                 <TextBlock Text="Sales are recorded against a drawer session so the end-of-day report can reconcile cash, card and tax. Count the float, then open the drawer."

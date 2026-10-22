@@ -22,6 +22,13 @@ namespace Kacher.Pos;
 /// </summary>
 public partial class App : Application
 {
+    /// <summary>
+    /// Single-instance guard. Two tills writing the same SQLite file is the classic way to corrupt a
+    /// POS database, and the installer checks this mutex before replacing binaries.
+    /// </summary>
+    private const string InstanceMutexName = "KacherPOS-running";
+
+    private Mutex? _instanceMutex;
     private IServiceProvider? _services;
 
     public static IServiceProvider Services =>
@@ -30,6 +37,23 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // ── Single instance ──────────────────────────────────────────────────────────────────
+        _instanceMutex = new Mutex(initiallyOwned: true, InstanceMutexName, out var isFirstInstance);
+
+        if (!isFirstInstance)
+        {
+            MessageBox.Show(
+                "Kacher POS is already running on this terminal.\n\n" +
+                "Switch to the existing window (Alt+Tab) instead of starting a second copy — " +
+                "two instances would write to the same database.",
+                "Kacher POS",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+
+            Shutdown(0);
+            return;
+        }
 
         // Single-byte code pages (CP437/1256/864 …) are not in .NET by default; ESC/POS needs them.
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -44,6 +68,22 @@ public partial class App : Application
 
             var bootstrapper = _services.GetRequiredService<DatabaseBootstrapper>();
             await bootstrapper.InitializeAsync().ConfigureAwait(true);
+
+            // Data safety before anything else: keep at most one snapshot per day, pruned to 30.
+            // Runs in the background so a large database never delays the sign-in screen.
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _services.GetRequiredService<IBackupService>()
+                        .EnsureRecentAsync(TimeSpan.FromHours(24))
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    startupLog.Warn($"Startup backup skipped: {ex.Message}");
+                }
+            });
 
             var settings = _services.GetRequiredService<IAppSettingsService>();
             await settings.LoadAsync().ConfigureAwait(true);
@@ -107,6 +147,7 @@ public partial class App : Application
         services.AddSingleton<IUserRepository, UserRepository>();
         services.AddSingleton<IHardwareConfigRepository, HardwareConfigRepository>();
         services.AddSingleton<ISaleService, SaleService>();
+        services.AddSingleton<IBackupService, BackupService>();
         services.AddSingleton<IShiftService, ShiftService>();
         services.AddSingleton<IReportService, ReportService>();
 
@@ -121,7 +162,9 @@ public partial class App : Application
         // ── View models ─────────────────────────────────────────────────────────────────────
         // Screens are transient: MainViewModel caches the instances it navigates to.
         services.AddTransient<LoginViewModel>();
+        services.AddTransient<DashboardViewModel>();
         services.AddTransient<SalesViewModel>();
+        services.AddTransient<InvoicesViewModel>();
         services.AddTransient<ProductsViewModel>();
         services.AddTransient<InventoryViewModel>();
         services.AddTransient<ReportsViewModel>();
@@ -150,6 +193,10 @@ public partial class App : Application
     /// </summary>
     public void RestartForOperatorChange()
     {
+        // Hand the single-instance mutex over *before* the child starts, otherwise the new process
+        // would see "already running" and exit immediately.
+        ReleaseInstanceMutex();
+
         try
         {
             var processPath = Environment.ProcessPath;
@@ -198,8 +245,31 @@ public partial class App : Application
             log.Error("Unhandled domain exception.", args.ExceptionObject as Exception);
     }
 
+    /// <summary>Releases and drops the single-instance mutex. Idempotent.</summary>
+    private void ReleaseInstanceMutex()
+    {
+        if (_instanceMutex is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _instanceMutex.ReleaseMutex();
+        }
+        catch (ApplicationException)
+        {
+            // Not the owner (shutdown before startup completed) — nothing to release.
+        }
+
+        _instanceMutex.Dispose();
+        _instanceMutex = null;
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
+        ReleaseInstanceMutex();
+
         if (_services is { } services)
         {
             try

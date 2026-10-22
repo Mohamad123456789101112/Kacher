@@ -59,6 +59,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Embedded as WPF resources: the header brand mark is loaded with pack:// URIs, and the
+         taskbar icon must be resolvable from the assembly (not from a loose file). -->
+    <Resource Include="Assets\kacher.png" />
+    <Resource Include="Assets\kacher.ico" />
+
+    <!-- Also copied next to the exe: the receipt logo raster is read from disk at print time. -->
     <None Update="Assets\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

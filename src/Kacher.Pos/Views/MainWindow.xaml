@@ -11,6 +11,7 @@
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance vm:MainViewModel}"
         Title="Kacher POS"
+        Icon="pack://application:,,,/Assets/kacher.ico"
         Width="1440" Height="900"
         MinWidth="1024" MinHeight="700"
         WindowState="Maximized"
@@ -39,8 +40,14 @@
         <conv:CurrencyConverter x:Key="Currency" />
 
         <!-- View-model → view mapping. Explicit templates keep the shell free of navigation code. -->
+        <DataTemplate DataType="{x:Type vm:DashboardViewModel}">
+            <views:DashboardView />
+        </DataTemplate>
         <DataTemplate DataType="{x:Type vm:SalesViewModel}">
             <views:SalesView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:InvoicesViewModel}">
+            <views:InvoicesView />
         </DataTemplate>
         <DataTemplate DataType="{x:Type vm:ProductsViewModel}">
             <views:ProductsView />
@@ -80,9 +87,9 @@
                 MouseLeftButtonDown="OnTitleBarMouseDown">
             <Grid>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
-                    <Border Width="22" Height="22" CornerRadius="6" Background="{DynamicResource Kacher.Accent}">
-                        <TextBlock Text="K" FontWeight="Bold" FontSize="13" Foreground="#FF062B30"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <Border Width="24" Height="24" CornerRadius="7" ClipToBounds="True">
+                        <Image Source="pack://application:,,,/Assets/kacher.png" Stretch="UniformToFill"
+                               RenderOptions.BitmapScalingMode="HighQuality" />
                     </Border>
                     <TextBlock Text="Kacher POS" Margin="10,0,0,0" FontWeight="SemiBold" FontSize="13"
                                VerticalAlignment="Center" />
@@ -96,19 +103,23 @@
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button Style="{StaticResource Kacher.IconButton}" Width="42" Height="42"
                             Command="{Binding ToggleThemeCommand}" ToolTip="Toggle dark / light theme">
-                        <TextBlock Text="◐" FontSize="16" />
+                        <Path Style="{StaticResource Kacher.IconMuted}" Width="18" Height="18"
+                              Data="{Binding ThemeIcon, Converter={StaticResource IconKey}}" />
                     </Button>
                     <Button Style="{StaticResource Kacher.IconButton}" Width="42" Height="42"
                             Command="{Binding MinimizeCommand}" ToolTip="Minimize">
-                        <TextBlock Text="&#xE921;" FontFamily="Segoe MDL2 Assets" FontSize="10" />
+                        <Path Style="{StaticResource Kacher.IconMuted}" Width="14" Height="14"
+                              Data="{StaticResource Icon.Minimize}" />
                     </Button>
                     <Button Style="{StaticResource Kacher.IconButton}" Width="42" Height="42"
                             Command="{Binding ToggleMaximizeCommand}" ToolTip="Maximize / restore">
-                        <TextBlock Text="&#xE922;" FontFamily="Segoe MDL2 Assets" FontSize="10" />
+                        <Path Style="{StaticResource Kacher.IconMuted}" Width="14" Height="14"
+                              Data="{StaticResource Icon.Maximize}" />
                     </Button>
                     <Button Style="{StaticResource Kacher.IconButton}" Width="46" Height="42"
                             Command="{Binding CloseCommand}" ToolTip="Close">
-                        <TextBlock Text="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="10" />
+                        <Path Style="{StaticResource Kacher.IconMuted}" Width="14" Height="14"
+                              Data="{StaticResource Icon.Close}" />
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
                                 <Border x:Name="Bd" Background="Transparent">
@@ -210,7 +221,8 @@
                         Command="{Binding OpenDrawerCommand}"
                         ToolTip="Send the drawer kick pulse (Shift+F1)">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Open drawer" FontSize="12" VerticalAlignment="Center" />
+                        <Path Style="{StaticResource Kacher.IconMuted}" Data="{StaticResource Icon.Drawer}" />
+                        <TextBlock Text="Open drawer" FontSize="12" Margin="8,0,0,0" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
 
@@ -253,14 +265,14 @@
                         <Button Command="{Binding ToggleNavigationCommand}"
                                 Style="{StaticResource Kacher.IconButton}"
                                 HorizontalAlignment="Center" ToolTip="Collapse / expand navigation">
-                            <TextBlock Text="&#xE700;" FontFamily="Segoe MDL2 Assets" FontSize="14" />
+                            <Path Style="{StaticResource Kacher.IconMuted}" Width="18" Height="18"
+                                  Data="{StaticResource Icon.Collapse}" />
                         </Button>
                         <Button Command="{Binding SignOutCommand}"
                                 Style="{StaticResource Kacher.TouchButton}"
                                 Margin="0,8,0,0" Height="46" MinHeight="46" ToolTip="Sign out">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE7E8;" FontFamily="Segoe MDL2 Assets" FontSize="13"
-                                           VerticalAlignment="Center" />
+                                <Path Style="{StaticResource Kacher.IconMuted}" Data="{StaticResource Icon.SignOut}" />
                                 <TextBlock Text="Sign out" FontSize="12" Margin="8,0,0,0"
                                            VerticalAlignment="Center">
                                     <TextBlock.Style>
@@ -290,15 +302,14 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
 
-                                    <Border Width="34" Height="34" CornerRadius="10"
-                                            Background="{DynamicResource Kacher.AccentSoft}">
-                                        <TextBlock Text="{Binding Badge}" FontWeight="Bold" FontSize="14"
-                                                   Foreground="{DynamicResource Kacher.Accent}"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                    </Border>
+                                    <Path Width="20" Height="20" Stretch="Uniform" Fill="Transparent"
+                                          StrokeThickness="1.7" StrokeLineJoin="Round"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                          Data="{Binding IconKey, Converter={StaticResource IconKey}}"
+                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
 
                                     <TextBlock Grid.Column="1" Text="{Binding Label}" FontSize="14"
-                                               VerticalAlignment="Center" Margin="12,0,0,0">
+                                               VerticalAlignment="Center" Margin="14,0,0,0">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
                                                 <Setter Property="Visibility" Value="Visible" />

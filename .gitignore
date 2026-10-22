@@ -48,3 +48,6 @@ desktop.ini
 ## Local scratch
 /tmp/
 scratch/
+
+## Installer output
+/d[Ii]st/

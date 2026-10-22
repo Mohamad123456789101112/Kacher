@@ -7,6 +7,7 @@
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         mc:Ignorable="d"
         Title="Kacher POS — Sign in"
+        Icon="pack://application:,,,/Assets/kacher.ico"
         Width="980" Height="660"
         WindowStyle="None"
         ResizeMode="NoResize"
@@ -72,7 +73,7 @@
                         Margin="12" Width="40" Height="40"
                         Style="{StaticResource Kacher.IconButton}"
                         ToolTip="Exit">
-                    <TextBlock Text="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="White" />
+                    <Path Data="{StaticResource Icon.Close}" Stroke="White" StrokeThickness="1.7" Fill="Transparent" Width="13" Height="13" Stretch="Uniform" />
                 </Button>
             </Grid>
 

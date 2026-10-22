@@ -177,23 +177,34 @@
         <Setter Property="ItemContainerStyle">
             <Setter.Value>
                 <Style TargetType="ListBoxItem">
-                    <Setter Property="Margin" Value="10,4" />
+                    <Setter Property="Margin" Value="10,3" />
                     <Setter Property="Padding" Value="14,0" />
-                    <Setter Property="MinHeight" Value="56" />
+                    <Setter Property="MinHeight" Value="52" />
+                    <Setter Property="Foreground" Value="{DynamicResource Kacher.TextSecondary}" />
                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                     <Setter Property="Cursor" Value="Hand" />
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="ListBoxItem">
-                                <Border x:Name="Bd" CornerRadius="14" Background="Transparent" Padding="{TemplateBinding Padding}">
-                                    <ContentPresenter VerticalAlignment="Center" />
-                                </Border>
+                                <Grid>
+                                    <!-- Active rail: a 3 px accent bar, the cheapest possible signal that
+                                         survives at any DPI and does not move the content. -->
+                                    <Border x:Name="Rail" Width="3" Height="22" CornerRadius="2"
+                                            HorizontalAlignment="Left" VerticalAlignment="Center"
+                                            Margin="-4,0,0,0" Background="{DynamicResource Kacher.Accent}"
+                                            Opacity="0" />
+                                    <Border x:Name="Bd" CornerRadius="14" Background="Transparent"
+                                            Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter VerticalAlignment="Center" />
+                                    </Border>
+                                </Grid>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="Bd" Property="Background" Value="#14FFFFFF" />
+                                        <Setter TargetName="Bd" Property="Background" Value="#12FFFFFF" />
                                     </Trigger>
                                     <Trigger Property="IsSelected" Value="True">
                                         <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Kacher.AccentSoft}" />
+                                        <Setter TargetName="Rail" Property="Opacity" Value="1" />
                                         <Setter Property="Foreground" Value="{DynamicResource Kacher.Accent}" />
                                     </Trigger>
                                 </ControlTemplate.Triggers>
@@ -448,4 +459,61 @@
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
+    <!-- ═══════════════════════════════════════════════════════════════════════════════════════
+         Icons — one style, three tones. Data comes from Themes/Icons.xaml.
+         ═══════════════════════════════════════════════════════════════════════════════════════ -->
+
+    <Style x:Key="Kacher.Icon" TargetType="Path">
+        <Setter Property="Width" Value="20" />
+        <Setter Property="Height" Value="20" />
+        <Setter Property="Stretch" Value="Uniform" />
+        <Setter Property="Fill" Value="Transparent" />
+        <Setter Property="Stroke" Value="{DynamicResource Kacher.TextSecondary}" />
+        <Setter Property="StrokeThickness" Value="1.7" />
+        <Setter Property="StrokeLineJoin" Value="Round" />
+        <Setter Property="StrokeStartLineCap" Value="Round" />
+        <Setter Property="StrokeEndLineCap" Value="Round" />
+        <Setter Property="SnapsToDevicePixels" Value="False" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="Kacher.IconAccent" TargetType="Path" BasedOn="{StaticResource Kacher.Icon}">
+        <Setter Property="Stroke" Value="{DynamicResource Kacher.Accent}" />
+    </Style>
+
+    <Style x:Key="Kacher.IconMuted" TargetType="Path" BasedOn="{StaticResource Kacher.Icon}">
+        <Setter Property="Stroke" Value="{DynamicResource Kacher.TextMuted}" />
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Height" Value="16" />
+        <Setter Property="StrokeThickness" Value="1.6" />
+    </Style>
+
+    <Style x:Key="Kacher.IconLarge" TargetType="Path" BasedOn="{StaticResource Kacher.Icon}">
+        <Setter Property="Width" Value="26" />
+        <Setter Property="Height" Value="26" />
+    </Style>
+
+    <!-- Circular icon badge used by KPI tiles and empty states -->
+    <Style x:Key="Kacher.IconBadge" TargetType="Border">
+        <Setter Property="Width" Value="44" />
+        <Setter Property="Height" Value="44" />
+        <Setter Property="CornerRadius" Value="14" />
+        <Setter Property="Background" Value="{DynamicResource Kacher.AccentSoft}" />
+    </Style>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════════════════════
+         KPI tile — used on the dashboard and the reports header
+         ═══════════════════════════════════════════════════════════════════════════════════════ -->
+
+    <Style x:Key="Kacher.KpiTile" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Kacher.SurfaceAlt}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Kacher.Divider}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="18" />
+        <Setter Property="Padding" Value="18,16" />
+        <Setter Property="MinWidth" Value="170" />
+    </Style>
+
 </ResourceDictionary>
+

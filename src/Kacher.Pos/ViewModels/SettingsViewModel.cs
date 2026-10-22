@@ -46,6 +46,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private readonly IDialogService _dialogs;
     private readonly IThemeService _theme;
     private readonly IAppLog _log;
+    private readonly IBackupService _backups;
 
     public SettingsViewModel(
         IAppSettingsService settings,
@@ -55,6 +56,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         IThemeService theme,
         HardwareSettingsViewModel hardware,
         IAppLog log,
+        IBackupService backups,
         IUserNotifier notifier) : base(notifier)
     {
         _settings = settings;
@@ -63,6 +65,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _dialogs = dialogs;
         _theme = theme;
         _log = log;
+        _backups = backups;
 
         Hardware = hardware;
         Title = "Settings";
@@ -120,6 +123,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             IsDarkTheme = _theme.IsDark;
             await LoadUsersAsync(token).ConfigureAwait(true);
             RefreshDatabaseInfo();
+            RefreshBackupInfo();
             await Hardware.LoadAsync(token).ConfigureAwait(true);
         }, "Could not load settings.");
     }
@@ -288,6 +292,54 @@ public sealed partial class SettingsViewModel : ViewModelBase
             RefreshDatabaseInfo();
             Notifier.Success("Database compacted.");
         }, "Could not compact the database.");
+    }
+
+    // ── Backups ─────────────────────────────────────────────────────────────────────────────
+
+    [ObservableProperty]
+    private string _lastBackupText = "never";
+
+    [ObservableProperty]
+    private string _backupFolder = string.Empty;
+
+    /// <summary>
+    /// Manual snapshot. Uses SQLite's VACUUM INTO so it is consistent while the till is trading — the
+    /// operator never has to close the shop to protect the day's data.
+    /// </summary>
+    [RelayCommand]
+    private Task CreateBackupAsync() => RunAsync(async ct =>
+    {
+        var result = await _backups.CreateAsync(ct).ConfigureAwait(true);
+        _backups.Prune();
+
+        LastBackupText = $"{result.CreatedAtLocal:dd MMM HH:mm} · {result.SizeText}";
+        Notifier.Success($"Backup created: {result.Path}");
+    }, "Could not create the backup.");
+
+    [RelayCommand]
+    private void OpenBackupFolder()
+    {
+        var dir = _backups.BackupDirectory;
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = dir, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Notifier.Error($"Could not open the folder: {ex.Message}");
+        }
+    }
+
+    private void RefreshBackupInfo()
+    {
+        BackupFolder = _backups.BackupDirectory;
+
+        var latest = _backups.GetLatest();
+        LastBackupText = latest is null
+            ? "never"
+            : $"{latest.CreatedAtLocal:dd MMM HH:mm} · {latest.SizeText}";
     }
 
     private void RefreshDatabaseInfo()

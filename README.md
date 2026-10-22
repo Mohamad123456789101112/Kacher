@@ -1,6 +1,8 @@
 # Kacher POS
 
-A production-shaped **Windows point-of-sale terminal** built with **C# 12 / .NET 8 / WPF**, Material Design 3, EF Core + SQLite, and a hand-written **ESC/POS** hardware engine that talks directly to thermal printers and cash drawers.
+A **Windows point-of-sale terminal** built with **C# 12 / .NET 8 / WPF**, Material Design 3, EF Core + SQLite, and a hand-written **ESC/POS** hardware engine that talks directly to thermal printers and cash drawers.
+
+Ships as a **single signed-ready installer** (`KacherPOS-<version>-setup.exe`); the till needs nothing installed — no .NET runtime, no browser, no internet connection.
 
 The project is deliberately opinionated: it behaves like software that runs on a real counter — offline-first, touch-first, fast under load, and resilient when hardware misbehaves.
 
@@ -10,7 +12,9 @@ The project is deliberately opinionated: it behaves like software that runs on a
 
 | Area | Implementation |
 | --- | --- |
-| Shell | Borderless window, custom draggable title bar, window controls, collapsible navigation rail, top status bar |
+| Shell | Borderless window, custom title bar, collapsible navigation rail with active rail indicator, live status bar, hand-drawn vector icon set (no icon font) |
+| Dashboard | Manager landing screen: KPI tiles, "needs attention" worklist (low stock, no shift, expected drawer cash, refunds), best sellers, hourly revenue strip |
+| Invoices | Searchable invoice history (number / barcode / product / cashier), full ticket detail, reprint, PDF, **refund with stock return** |
 | Sign-in | Touch PIN pad (4–6 digits), PBKDF2-SHA256 PIN hashing, role matrix (Cashier / Supervisor / Admin), physical keyboard support |
 | Sales | Split cart + catalogue layout, category chips, product tiles, quantity steppers, line & order discounts, cash/card payment overlay, change calculation, quick-tender notes |
 | Barcode | Keyboard-wedge burst detection (timing-based, never steals focus) **and** serial (COM) scanners; auto-increment of duplicate lines |
@@ -22,6 +26,8 @@ The project is deliberately opinionated: it behaves like software that runs on a
 | Reports | Daily KPIs, hourly revenue chart, top sellers, tax bands, invoice history, CSV + PDF export |
 | Hardware UI | Printer/drawer/scanner configuration, device discovery, test print, test pulse, connection probe |
 | PDF | Dependency-free PDF writer for 80 mm receipts, Z-reports and A4 daily summaries |
+| Data safety | Automatic daily `VACUUM INTO` snapshot, manual "Back up now", 30-copy rotation, single-instance guard |
+| Packaging | Inno Setup installer (per-user, shortcut, uninstall entry), one-command publish script, CI producing both the folder and the setup exe |
 
 Everything runs **offline**. SQLite lives under `%LOCALAPPDATA%\Kacher`, so no admin rights are needed.
 
@@ -61,11 +67,26 @@ Self-contained means the till needs **nothing installed** — no .NET runtime, n
 run `Kacher.Pos.exe`, done. Add `-FrameworkDependent` for a much smaller folder if the .NET 8 Desktop
 Runtime is already on the machine.
 
+**A2. Build the customer installer (`.exe` that installs the app)**
+
+```powershell
+winget install JRSoftware.InnoSetup     # once
+.\build-installer.ps1 -Version 1.0.0   # -> dist\KacherPOS-1.0.0-setup.exe
+```
+
+One file to hand over: per-user install (no admin prompt), Start-menu + optional desktop shortcut,
+optional start-at-login, proper uninstall entry, and `%LOCALAPPDATA%\Kacher` (database, backups,
+reports) is **kept** across upgrades and uninstalls.
+
 **B. Let GitHub build it**
 
 Push a tag (`git tag v1.0.0 && git push --tags`) or run the **build** workflow manually
 (*Actions → build → Run workflow*). It compiles the solution, publishes the self-contained app and
 attaches `kacher-pos-win-x64` to the run (and to the release, for tags) — download, unzip, run.
+
+> **If the workflow does not appear:** GitHub Actions must be enabled for the repository
+> (*Settings → Actions → General → Allow all actions*). Until it is, option **A** is the only path to
+> an executable — it is also the fastest one on a Windows machine.
 
 The exe is unsigned, so Windows SmartScreen shows "Unknown publisher" on first launch: *More info →
 Run anyway*. Sign it for production with an Authenticode certificate
@@ -153,6 +174,7 @@ Kacher.Pos
 ## 4. Hardware (ESC/POS)
 
 Verification status — what was statically checked, and the on-terminal acceptance runbook — is in [`docs/VERIFICATION.md`](docs/VERIFICATION.md).
+Positioning, deployment and licensing notes for selling the product are in [`docs/PRODUCT.md`](docs/PRODUCT.md).
 
 The engine writes raw bytes — no GDI rendering, no spooler translation. The full command reference, transport matrix and troubleshooting guide is in [`docs/ESC-POS.md`](docs/ESC-POS.md). Highlights:
 
