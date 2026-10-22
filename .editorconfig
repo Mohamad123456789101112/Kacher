@@ -1,0 +1,50 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+
+[*.{xaml,csproj,props,targets,xml,yml,yaml,json}]
+indent_size = 2
+end_of_line = lf
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.cs]
+# Namespaces
+csharp_style_namespace_declarations = file_scoped:suggestion
+dotnet_sort_system_directives_first = true
+
+# Modern C#
+csharp_style_var_for_built_in_types = false:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_prefer_braces = true:suggestion
+csharp_style_prefer_pattern_matching = true:suggestion
+csharp_style_prefer_switch_expression = true:suggestion
+csharp_style_prefer_null_check_over_type_check = true:suggestion
+csharp_style_throw_expression = true:suggestion
+
+# Async
+dotnet_diagnostic.CA2007.severity = none   # ConfigureAwait is used explicitly in library code
+dotnet_diagnostic.CA1849.severity = none   # ValueTask usage is deliberate
+# Non-nullable members that EF/WPF set via reflection (or DI-injected) are legitimate; keep
+# CS8618 visible as a warning so it guides review without blocking an unattended build.
+dotnet_diagnostic.CS8618.severity = warning
+
+# Nullability & analysis
+dotnet_diagnostic.CA1062.severity = none   # argument null validation is enforced by nullable annotations
+dotnet_diagnostic.IDE0005.severity = suggestion
+
+# Naming (match the existing codebase: private fields are _camelCase)
+dotnet_naming_rule.private_fields_underscore.severity = suggestion
+dotnet_naming_rule.private_fields_underscore.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore.style = underscore_camel_case
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_style.underscore_camel_case.required_prefix = _
+dotnet_naming_style.underscore_camel_case.capitalization = camel_case

@@ -1,0 +1,95 @@
+<UserControl x:Class="Kacher.Pos.Views.LoginView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:Kacher.Pos.ViewModels"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance vm:LoginViewModel}"
+             d:DesignWidth="420" d:DesignHeight="600">
+
+    <Grid>
+        <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="Sign in" Style="{StaticResource Kacher.Display}" />
+            <TextBlock Text="{Binding CashierHint}" Style="{StaticResource Kacher.Subtitle}" Margin="0,6,0,24" />
+
+            <!-- PIN display -->
+            <Border Background="{DynamicResource Kacher.SurfaceRaised}"
+                    CornerRadius="16" Padding="24,20"
+                    BorderBrush="{DynamicResource Kacher.Divider}" BorderThickness="1">
+                <StackPanel>
+                    <TextBlock Text="{Binding MaskedPin}"
+                               FontSize="34"
+                               HorizontalAlignment="Center"
+                               Foreground="{DynamicResource Kacher.Accent}"
+                               FontFamily="Segoe UI Symbol" />
+                    <TextBlock Text="PIN is 4–6 digits"
+                               Style="{StaticResource Kacher.Caption}"
+                               HorizontalAlignment="Center" Margin="0,8,0,0" />
+                </StackPanel>
+            </Border>
+
+            <!-- Error -->
+            <Border Background="#33EF4444" CornerRadius="10" Padding="12,8" Margin="0,14,0,0"
+                    Visibility="{Binding ErrorMessage, Converter={StaticResource NullToVisibility}}">
+                <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource Kacher.Danger}"
+                           FontSize="13" TextWrapping="Wrap" />
+            </Border>
+
+            <!-- Keypad -->
+            <Grid Margin="0,20,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition />
+                    <ColumnDefinition />
+                    <ColumnDefinition />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition />
+                    <RowDefinition />
+                    <RowDefinition />
+                    <RowDefinition />
+                </Grid.RowDefinitions>
+
+                <Button Grid.Row="0" Grid.Column="0" Content="1" Style="{StaticResource Kacher.PinKey}"
+                        Command="{Binding AppendDigitCommand}" CommandParameter="1" />
+                <Button Grid.Row="0" Grid.Column="1" Content="2" Style="{StaticResource Kacher.PinKey}"
+                        Command="{Binding AppendDigitCommand}" CommandParameter="2" />
+                <Button Grid.Row="0" Grid.Column="2" Content="3" Style="{StaticResource Kacher.PinKey}"
+                        Command="{Binding AppendDigitCommand}" CommandParameter="3" />
+
+                <Button Grid.Row="1" Grid.Column="0" Content="4" Style="{StaticResource Kacher.PinKey}"
+                        Command="{Binding AppendDigitCommand}" CommandParameter="4" />
+                <Button Grid.Row="1" Grid.Column="1" Content="5" Style="{StaticResource Kacher.PinKey}"
+                        Command="{Binding AppendDigitCommand}" CommandParameter="5" />
+                <Button Grid.Row="1" Grid.Column="2" Content="6" Style="{StaticResource Kacher.PinKey}"
+                        Command="{Binding AppendDigitCommand}" CommandParameter="6" />
+
+                <Button Grid.Row="2" Grid.Column="0" Content="7" Style="{StaticResource Kacher.PinKey}"
+                        Command="{Binding AppendDigitCommand}" CommandParameter="7" />
+                <Button Grid.Row="2" Grid.Column="1" Content="8" Style="{StaticResource Kacher.PinKey}"
+                        Command="{Binding AppendDigitCommand}" CommandParameter="8" />
+                <Button Grid.Row="2" Grid.Column="2" Content="9" Style="{StaticResource Kacher.PinKey}"
+                        Command="{Binding AppendDigitCommand}" CommandParameter="9" />
+
+                <Button Grid.Row="3" Grid.Column="0" Content="C" Style="{StaticResource Kacher.PinKey}"
+                        FontSize="20" Command="{Binding ClearCommand}" ToolTip="Clear" />
+                <Button Grid.Row="3" Grid.Column="1" Content="0" Style="{StaticResource Kacher.PinKey}"
+                        Command="{Binding AppendDigitCommand}" CommandParameter="0" />
+                <Button Grid.Row="3" Grid.Column="2" Style="{StaticResource Kacher.PinKey}"
+                        Command="{Binding BackspaceCommand}" ToolTip="Backspace">
+                    <TextBlock Text="&#xE894;" FontFamily="Segoe MDL2 Assets" FontSize="22" />
+                </Button>
+            </Grid>
+
+            <Button Content="Sign in"
+                    Command="{Binding SignInCommand}"
+                    IsEnabled="{Binding CanSubmit}"
+                    Style="{StaticResource Kacher.PrimaryButton}"
+                    Height="62" Margin="6,18,6,0" FontSize="17" />
+
+            <TextBlock Style="{StaticResource Kacher.Caption}" Margin="0,20,0,0"
+                       TextAlignment="Center"
+                       Text="Demo operators — Admin 1234 · Supervisor 2468 · Cashier 1111. Change these in Settings before going live." />
+        </StackPanel>
+    </Grid>
+</UserControl>

@@ -1,0 +1,86 @@
+name: build
+
+on:
+  push:
+    branches: [main, 'arena/**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # ── Compile gate ──────────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build (Windows / .NET 8)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore Kacher.sln
+
+      - name: Build
+        run: dotnet build Kacher.sln --configuration Release --no-restore
+
+  # ── Runnable application ──────────────────────────────────────────────────────────────────────
+  # WPF can only be published on Windows: the XAML markup compiler and the Windows Desktop
+  # targeting pack are Windows-only. This job produces a self-contained win-x64 folder, so the
+  # machine that runs the till needs nothing installed.
+  publish:
+    name: Publish app (win-x64)
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write   # needed to attach the zip to a tag release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish
+        run: >
+          dotnet publish src/Kacher.Pos/Kacher.Pos.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          --output dist/KacherPos
+          -p:PublishSingleFile=false
+          -p:PublishTrimmed=false
+          -p:DebugType=embedded
+
+      - name: Verify the executable exists
+        shell: pwsh
+        run: |
+          $exe = 'dist/KacherPos/Kacher.Pos.exe'
+          if (-not (Test-Path $exe)) { throw "Publish did not produce $exe" }
+          $size = [math]::Round((Get-ChildItem dist/KacherPos -Recurse -File |
+                                Measure-Object -Property Length -Sum).Sum / 1MB, 1)
+          Write-Host "Kacher.Pos.exe ready — $size MB"
+
+      - name: Upload application
+        uses: actions/upload-artifact@v4
+        with:
+          name: kacher-pos-win-x64
+          path: dist/KacherPos
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Zip the application
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: Compress-Archive -Path dist/KacherPos/* -DestinationPath Kacher-POS-win-x64.zip
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Kacher-POS-win-x64.zip
+          generate_release_notes: true

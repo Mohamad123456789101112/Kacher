@@ -1,0 +1,228 @@
+<UserControl x:Class="Kacher.Pos.Views.ProductsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:Kacher.Pos.ViewModels"
+             xmlns:conv="clr-namespace:Kacher.Pos.Converters"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance vm:ProductsViewModel}"
+             d:DesignWidth="1200" d:DesignHeight="760">
+
+    <UserControl.Resources>
+        <conv:CountToVisibilityConverter x:Key="CountToVisibility" />
+        <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0" Style="{StaticResource Kacher.Panel}" Padding="16">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Toolbar -->
+                <Grid Grid.Row="0" Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="280" />
+                        <ColumnDefinition Width="200" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBox Grid.Column="0" Style="{StaticResource Kacher.TextBox}"
+                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=250}"
+                             ToolTip="Search by name or barcode" />
+
+                    <ComboBox Grid.Column="1" Margin="10,0,0,0"
+                              Style="{StaticResource Kacher.ComboBox}"
+                              ItemsSource="{Binding Categories}"
+                              SelectedItem="{Binding SelectedCategory}"
+                              DisplayMemberPath="Name" />
+
+                    <CheckBox Grid.Column="2" Content="Low stock only"
+                              Style="{StaticResource Kacher.CheckBox}"
+                              IsChecked="{Binding LowStockOnly}"
+                              Margin="14,0,0,0" VerticalAlignment="Center" />
+
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center"
+                                HorizontalAlignment="Right" Margin="0,0,12,0">
+                        <TextBlock Text="{Binding TotalCount}" FontWeight="Bold" FontSize="16"
+                                   Foreground="{DynamicResource Kacher.Accent}" />
+                        <TextBlock Text=" products" Style="{StaticResource Kacher.Subtitle}" VerticalAlignment="Center" />
+                        <Border Background="#33F59E0B" CornerRadius="999" Padding="8,2" Margin="12,0,0,0">
+                            <TextBlock FontSize="11" Foreground="{DynamicResource Kacher.Warning}">
+                                <Run Text="{Binding LowStockCount}" />
+                                <Run Text=" low stock" />
+                            </TextBlock>
+                        </Border>
+                    </StackPanel>
+
+                    <Button Grid.Column="4" Content="+ New product"
+                            Style="{StaticResource Kacher.PrimaryButton}"
+                            Height="48" MinHeight="48" Padding="18,0"
+                            Command="{Binding NewProductCommand}"
+                            IsEnabled="{Binding CanEditProducts}" />
+                </Grid>
+
+                <!-- Grid -->
+                <DataGrid Grid.Row="1" ItemsSource="{Binding Products}"
+                          Style="{StaticResource Kacher.DataGrid}"
+                          SelectedItem="{Binding SelectedRow}"
+                          RowHeight="58">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="NAME" Binding="{Binding Name}" Width="2*" />
+                        <DataGridTextColumn Header="BARCODE" Binding="{Binding Barcode}" Width="150" />
+                        <DataGridTextColumn Header="CATEGORY" Binding="{Binding CategoryName}" Width="130" />
+                        <DataGridTextColumn Header="PRICE" Binding="{Binding SellingPrice, StringFormat={}{0:0.00}}"
+                                            Width="90" />
+                        <DataGridTextColumn Header="COST" Binding="{Binding CostPrice, StringFormat={}{0:0.00}}"
+                                            Width="90" />
+                        <DataGridTextColumn Header="MARGIN" Binding="{Binding Margin, StringFormat={}{0:0.00}}"
+                                            Width="90" />
+                        <DataGridTextColumn Header="STOCK" Binding="{Binding StockQuantity, StringFormat={}{0:0.##}}"
+                                            Width="90" />
+                        <DataGridTextColumn Header="VAT" Binding="{Binding TaxRateDisplay}" Width="70" />
+                        <DataGridTemplateColumn Header="ACTIONS" Width="110">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Style="{StaticResource Kacher.IconButton}" Width="34" Height="34"
+                                                Command="{Binding DataContext.EditProductCommand,
+                                                    RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}" ToolTip="Edit">
+                                            <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" FontSize="12" />
+                                        </Button>
+                                        <Button Style="{StaticResource Kacher.IconButton}" Width="34" Height="34"
+                                                Command="{Binding DataContext.DeleteProductCommand,
+                                                    RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}" ToolTip="Retire">
+                                            <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                                                       Foreground="{DynamicResource Kacher.Danger}" />
+                                        </Button>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Border>
+
+        <!-- Inline editor: no modal, no lost context -->
+        <Border Grid.Column="1" Width="400" Margin="12,0,0,0"
+                Style="{StaticResource Kacher.Panel}" Padding="20"
+                Visibility="{Binding IsEditorOpen, Converter={StaticResource BoolToVisibility}}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Text="{Binding Editor.Header}" Style="{StaticResource Kacher.Title}" />
+
+                    <TextBlock Text="NAME" Style="{StaticResource Kacher.Label}" Margin="0,16,0,4" />
+                    <TextBox Style="{StaticResource Kacher.TextBox}" Text="{Binding Editor.Name, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <TextBlock Text="BARCODE / EAN-13" Style="{StaticResource Kacher.Label}" Margin="0,12,0,4" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Style="{StaticResource Kacher.TextBox}"
+                                 Text="{Binding Editor.Barcode, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Grid.Column="1" Style="{StaticResource Kacher.TouchButton}"
+                                Content="Scan/Gen" MinHeight="52" Height="52" Padding="12,0" Margin="8,0,0,0"
+                                Command="{Binding GenerateBarcodeForEditorCommand}" />
+                    </Grid>
+
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="CATEGORY" Style="{StaticResource Kacher.Label}" Margin="0,0,0,4" />
+                            <ComboBox Style="{StaticResource Kacher.ComboBox}"
+                                      ItemsSource="{Binding Categories}"
+                                      SelectedValue="{Binding Editor.CategoryId}"
+                                      SelectedValuePath="Id"
+                                      DisplayMemberPath="Name" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="VAT %" Style="{StaticResource Kacher.Label}" Margin="0,0,0,4" />
+                            <TextBox Style="{StaticResource Kacher.TextBox}"
+                                     Text="{Binding Editor.TaxRatePercentText, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="SELLING PRICE" Style="{StaticResource Kacher.Label}" Margin="0,0,0,4" />
+                            <TextBox Style="{StaticResource Kacher.TextBox}"
+                                     Text="{Binding Editor.SellingPriceText, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="COST PRICE" Style="{StaticResource Kacher.Label}" Margin="0,0,0,4" />
+                            <TextBox Style="{StaticResource Kacher.TextBox}"
+                                     Text="{Binding Editor.CostPriceText, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="STOCK QTY" Style="{StaticResource Kacher.Label}" Margin="0,0,0,4" />
+                            <TextBox Style="{StaticResource Kacher.TextBox}"
+                                     Text="{Binding Editor.StockText, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="REORDER LEVEL" Style="{StaticResource Kacher.Label}" Margin="0,0,0,4" />
+                            <TextBox Style="{StaticResource Kacher.TextBox}"
+                                     Text="{Binding Editor.ReorderLevelText, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <CheckBox Content="Sold by weight (kg)" Style="{StaticResource Kacher.CheckBox}"
+                              IsChecked="{Binding Editor.IsWeighted}" Margin="0,14,0,0" />
+                    <CheckBox Content="Active (visible at the till)" Style="{StaticResource Kacher.CheckBox}"
+                              IsChecked="{Binding Editor.IsActive}" />
+
+                    <TextBlock Text="{Binding Editor.Error}" Foreground="{DynamicResource Kacher.Danger}"
+                               FontSize="12" Margin="0,10,0,0" TextWrapping="Wrap"
+                               Visibility="{Binding Editor.Error, Converter={StaticResource NullToVisibility}}" />
+
+                    <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
+                        <Button Content="Save" Style="{StaticResource Kacher.PrimaryButton}"
+                                Width="150" Height="52" MinHeight="52"
+                                Command="{Binding SaveEditorCommand}" Margin="0,0,10,0" />
+                        <Button Content="Cancel" Style="{StaticResource Kacher.TouchButton}"
+                                Width="120" Height="52" MinHeight="52"
+                                Command="{Binding CancelEditCommand}" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</UserControl>

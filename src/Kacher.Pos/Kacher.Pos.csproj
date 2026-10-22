@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>12.0</LangVersion>
+    <RootNamespace>Kacher.Pos</RootNamespace>
+    <AssemblyName>Kacher.Pos</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!-- Window/taskbar icon is embedded so a published build needs no loose .ico next to the exe -->
+    <ApplicationIcon>Assets\kacher.ico</ApplicationIcon>
+    <UseWindowsForms>false</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+
+    <Product>Kacher POS</Product>
+    <Company>Kacher Retail Systems</Company>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+
+    <!-- Fail fast on nullable/analysis regressions in CI -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <InvariantGlobalization>false</InvariantGlobalization>
+
+    <PublishSingleFile>false</PublishSingleFile>
+    <SelfContained>false</SelfContained>
+    <!-- RIDs are supplied at publish time (dotnet publish -r win-x64) rather than pinned here, so a
+         plain `dotnet build` on a CI agent does not need the full RID graph. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- MVVM: source-generated observable properties + async commands -->
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+
+    <!-- Modern Material Design 3 theming, ripple effects and touch-friendly controls -->
+    <PackageReference Include="MaterialDesignThemes" Version="5.1.0" />
+
+    <!-- Persistence: SQLite provider + code-first modelling -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.10">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+
+    <!-- Composition + diagnostics -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.1" />
+
+    <!-- ESC/POS code page support (CP437 / CP850 / Windows-1256) on .NET 8 -->
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
+
+    <!-- Optional serial (RS-232) barcode scanner transport -->
+    <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Assets\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>
