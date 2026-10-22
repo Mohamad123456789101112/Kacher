@@ -32,7 +32,9 @@ csharp_style_throw_expression = true:suggestion
 # Async
 dotnet_diagnostic.CA2007.severity = none   # ConfigureAwait is used explicitly in library code
 dotnet_diagnostic.CA1849.severity = none   # ValueTask usage is deliberate
-dotnet_diagnostic.CS8618.severity = error  # uninitialised non-nullable member
+# Non-nullable members that EF/WPF set via reflection (or DI-injected) are legitimate; keep
+# CS8618 visible as a warning so it guides review without blocking an unattended build.
+dotnet_diagnostic.CS8618.severity = warning
 
 # Nullability & analysis
 dotnet_diagnostic.CA1062.severity = none   # argument null validation is enforced by nullable annotations

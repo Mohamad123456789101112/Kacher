@@ -126,6 +126,8 @@ Kacher.Pos
 
 ## 4. Hardware (ESC/POS)
 
+Verification status — what was statically checked, and the on-terminal acceptance runbook — is in [`docs/VERIFICATION.md`](docs/VERIFICATION.md).
+
 The engine writes raw bytes — no GDI rendering, no spooler translation. The full command reference, transport matrix and troubleshooting guide is in [`docs/ESC-POS.md`](docs/ESC-POS.md). Highlights:
 
 * **Receipt template** — logo, store identity, tax registration, itemised lines with wrapped names, per-band VAT breakdown, emphasised total, tender/change, QR for the digital receipt, Code128 invoice barcode, footer, cut.

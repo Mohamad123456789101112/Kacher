@@ -11,7 +11,7 @@
     <AssemblyName>Kacher.Pos</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
 
-    <!-- Touch-ready, smooth rendering: enable GPU tier-2 and disable legacy bitmap scaling heuristics -->
+    <!-- Window/taskbar icon is embedded so a published build needs no loose .ico next to the exe -->
     <ApplicationIcon>Assets\kacher.ico</ApplicationIcon>
     <UseWindowsForms>false</UseWindowsForms>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
