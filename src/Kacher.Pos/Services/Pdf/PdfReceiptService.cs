@@ -49,8 +49,10 @@ public sealed class PdfReceiptService : IPdfReceiptService
         var width = config.PaperWidth == PaperWidth.Mm58 ? 164 : 227;
 
         // Estimate the height from the content so the page is exactly as tall as the ticket.
+        // Height estimate: fixed header/footer block plus two lines per item and per payment.
+        // Generous on purpose — a clipped footer on a receipt is worse than a little white paper.
         var lines = 18 + (invoice.Items.Count * 2) + (invoice.Payments.Count * 2);
-        var height = Math.Max(240, lines * 11.5);
+        var height = Math.Max(260, 90 + (lines * 12.0));
 
         var writer = new SimplePdfWriter(width, height);
         var y = 14.0;

@@ -122,13 +122,16 @@ public sealed class SimplePdfWriter
             "<< /Type /Catalog /Pages 2 0 R >>",
             string.Empty, // page tree, filled in once the object numbers are known
             "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
-            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>"
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
+            string.Create(CultureInfo.InvariantCulture,
+                $"<< /Title ({Escape(title)}) /Producer (Kacher POS) " +
+                $"/CreationDate (D:{DateTime.UtcNow:yyyyMMddHHmmss}Z) >>")
         };
 
         var pageObjectNumbers = new List<int>(_pages.Count);
 
-        // Page objects start at 5 and streams alternate after them.
-        var nextNumber = 5;
+        // Object 5 is the /Info dictionary; page objects and their streams start at 6.
+        var nextNumber = 6;
 
         foreach (var page in _pages)
         {
@@ -181,9 +184,10 @@ public sealed class SimplePdfWriter
             writer.Write(string.Create(CultureInfo.InvariantCulture, $"{offsets[number]:D10} 00000 n \n"));
         }
 
+        // /Info is an indirect reference (object 5), which is what the spec requires.
         writer.Write(string.Create(CultureInfo.InvariantCulture,
-            $"trailer\n<< /Size {objects.Count + 1} /Root 1 0 R /Info << /Title ({Escape(title)}) " +
-            $"/Producer (Kacher POS) >> >>\nstartxref\n{xrefPosition}\n%%EOF\n"));
+            $"trailer\n<< /Size {objects.Count + 1} /Root 1 0 R /Info 5 0 R >>\n" +
+            $"startxref\n{xrefPosition}\n%%EOF\n"));
 
         writer.Flush();
         return buffer.ToArray();

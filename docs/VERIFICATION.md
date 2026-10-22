@@ -29,6 +29,7 @@ this repository has been reviewed and statically validated, not executed. Treat 
 | 14 | Every `using Kacher.Pos.*` / `clr-namespace` reference resolves to a real namespace | namespace inventory cross-reference | pass |
 | 15 | No type is declared twice, and no simple name lives in two namespaces | declaration inventory (162 types) | pass |
 | 16 | Every `new X(...)` matches a constructor arity | constructor inventory vs call sites | pass |
+| 17 | The PDF byte layout used by `SimplePdfWriter` produces a valid document | object graph + xref offsets reproduced 1:1 and parsed with `pypdf` | pass — 2 pages, text and `/Info` extracted correctly |
 
 > Check 11 reports `Data/DatabaseConnectionFactory.cs` as a syntax error. That is a **grammar
 > limitation**, not a code defect: the file uses a C# 11 raw string literal (`""" … """`) for the
