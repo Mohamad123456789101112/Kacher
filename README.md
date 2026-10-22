@@ -84,6 +84,10 @@ Push a tag (`git tag v1.0.0 && git push --tags`) or run the **build** workflow m
 (*Actions → build → Run workflow*). It compiles the solution, publishes the self-contained app and
 attaches `kacher-pos-win-x64` to the run (and to the release, for tags) — download, unzip, run.
 
+> **If the workflow does not appear:** GitHub Actions must be enabled for the repository
+> (*Settings → Actions → General → Allow all actions*). Until it is, option **A** is the only path to
+> an executable — it is also the fastest one on a Windows machine.
+
 The exe is unsigned, so Windows SmartScreen shows "Unknown publisher" on first launch: *More info →
 Run anyway*. Sign it for production with an Authenticode certificate
 (`signtool sign /fd SHA256 /a Kacher.Pos.exe`).
